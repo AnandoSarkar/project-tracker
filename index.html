@@ -186,6 +186,84 @@
   .col-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 16px 8px; }
   .kboard-hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
 
+  /* Calendar */
+  .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .cal-bar .cal-title { font-size: 17px; font-weight: 600; min-width: 170px; }
+  .cal-nav {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    width: 32px; height: 32px; cursor: pointer; font-size: 16px; color: var(--ink); line-height: 1;
+  }
+  .cal-nav:hover { background: var(--bg); }
+  .cal-today-btn {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  }
+  .cal-today-btn:hover { background: var(--bg); }
+  .cal-hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  /* Month / Week / Day segmented toggle */
+  .cal-modes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .cal-modes button {
+    background: var(--card); border: none; border-right: 1px solid var(--line);
+    padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted);
+  }
+  .cal-modes button:last-child { border-right: none; }
+  .cal-modes button.active { background: var(--accent); color: #fff; }
+  .cal-modes button:not(.active):hover { background: var(--bg); }
+
+  .calendar { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-weekdays { background: #ebecf0; }
+  .cal-weekdays div {
+    padding: 8px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); font-weight: 600; text-align: center; border-right: 1px solid var(--line);
+  }
+  .cal-weekdays div:last-child { border-right: none; }
+  .cal-cell {
+    min-height: 92px; border-right: 1px solid var(--line); border-top: 1px solid var(--line);
+    padding: 4px 5px; cursor: pointer; position: relative; transition: background .1s ease;
+  }
+  .cal-cell:hover { background: var(--accent-soft); }
+  .cal-cell:nth-child(7n) { border-right: none; }
+  .cal-cell.blank { background: #fafbfc; cursor: default; }
+  .cal-cell.blank:hover { background: #fafbfc; }
+  .cal-cell.today { background: #fff8e6; }
+  .cal-cell.today:hover { background: #fff3d6; }
+  .cal-daynum { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .cal-cell.today .cal-daynum {
+    background: var(--accent); color: #fff; border-radius: 50%;
+    width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .cal-task {
+    font-size: 11px; line-height: 1.3; margin-top: 3px; padding: 2px 5px; border-radius: 4px;
+    background: var(--accent-soft); color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-left: 3px solid var(--accent);
+  }
+  .cal-task.todo { border-left-color: var(--muted); }
+  .cal-task.doing { border-left-color: var(--amber); }
+  .cal-task.done { border-left-color: var(--green); color: var(--muted); text-decoration: line-through; }
+  .cal-task.overdue { border-left-color: var(--red); }
+  .cal-more { font-size: 10px; color: var(--muted); margin-top: 2px; padding-left: 5px; }
+
+  /* Week view: taller cells, all tasks shown (no "+N more" cap) */
+  .calendar.week-mode .cal-cell { min-height: 320px; }
+  .calendar.week-mode .cal-weekdays div span { display: block; font-size: 14px; color: var(--ink); margin-top: 2px; }
+  .cal-cell.today .cal-wd-num { color: var(--accent); }
+
+  /* Day view: single column, generous spacing */
+  .calendar.day-mode .cal-weekdays { grid-template-columns: 1fr; }
+  .calendar.day-mode .cal-grid { grid-template-columns: 1fr; }
+  .calendar.day-mode .cal-cell { min-height: 360px; border-right: none; }
+  .calendar.day-mode .cal-task { white-space: normal; font-size: 13px; padding: 6px 9px; margin-top: 6px; }
+  .day-empty { color: var(--muted); font-size: 13px; padding: 18px 6px; }
+
+  @media (max-width: 640px) {
+    .cal-cell { min-height: 64px; }
+    .calendar.week-mode .cal-cell { min-height: 140px; }
+    .cal-task { font-size: 10px; }
+  }
+
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
 </style>
 </head>
@@ -200,7 +278,7 @@
     <div class="tabs" id="tabs">
       <button class="tab active" data-view="list">List</button>
       <button class="tab" data-view="kanban">Kanban</button>
-      <button class="tab" data-view="calendar" disabled>Calendar<span class="soon">soon</span></button>
+      <button class="tab" data-view="calendar">Calendar</button>
       <button class="tab" data-view="gantt" disabled>Gantt<span class="soon">soon</span></button>
     </div>
 
@@ -247,6 +325,28 @@
       <p class="kboard-hint">Drag a card between columns to change its status. 🖐️</p>
       <div class="board" id="kanbanBoard"></div>
     </section>
+
+    <!-- CALENDAR VIEW -->
+    <section id="view-calendar" style="display:none">
+      <div class="cal-bar">
+        <button class="cal-nav" id="calPrev" aria-label="Previous" title="Previous">‹</button>
+        <span class="cal-title" id="calTitle"></span>
+        <button class="cal-nav" id="calNext" aria-label="Next" title="Next">›</button>
+        <button class="cal-today-btn" id="calToday">Today</button>
+        <span class="cal-modes" id="calModes">
+          <button data-mode="month" class="active">Month</button>
+          <button data-mode="week">Week</button>
+          <button data-mode="day">Day</button>
+        </span>
+        <span class="cal-hint">Click a day to add a task due then.</span>
+      </div>
+      <div class="calendar" id="calWrap">
+        <div class="cal-weekdays" id="calWeekdays">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </section>
   </div>
 
   <footer>Built as a learning project · data stored locally in your browser</footer>
@@ -264,6 +364,8 @@ const STORE_KEY = "projectTracker.tasks.v1";
 let tasks = load();
 let currentView = "list";
 let editingId = null;   // null = form is in "add" mode; otherwise the id being edited
+let calCursor = new Date(); calCursor.setDate(1);  // anchor date for the calendar
+let calMode = "month";                              // "month" | "week" | "day"
 
 // --- Persistence ---
 function load() {
@@ -292,6 +394,13 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 const STATUS_LABEL = { todo: "To Do", doing: "In Progress", done: "Done" };
+
+// Build a YYYY-MM-DD string from year/month/day numbers (month is 0-based, like JS Dates)
+function ymd(year, month, day) {
+  const mm = String(month + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
+}
 
 // --- CRUD ---
 function addTask(title, due, status) {
@@ -482,17 +591,173 @@ function renderKanban() {
   });
 }
 
+// --- Rendering (Calendar view) ---
+const MONTH_NAMES = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+
+const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+// Group all dated tasks by their due date — used by every calendar mode.
+function tasksByDate() {
+  const byDate = {};
+  tasks.forEach(t => {
+    if (!t.due) return;
+    (byDate[t.due] = byDate[t.due] || []).push(t);
+  });
+  return byDate;
+}
+
+// Make a task chip element for a given date.
+function taskChip(t, dateStr, today) {
+  const overdue = dateStr < today && t.status !== "done";
+  const chip = document.createElement("div");
+  chip.className = "cal-task " + t.status + (overdue ? " overdue" : "");
+  chip.textContent = t.title;
+  chip.title = t.title + " — " + STATUS_LABEL[t.status];
+  chip.addEventListener("click", e => { e.stopPropagation(); startEdit(t.id); });
+  return chip;
+}
+
+// Make one day cell. `cap` limits visible chips (month view); null = show all.
+function dayCell(dateStr, dayNum, byDate, today, cap) {
+  const cell = document.createElement("div");
+  cell.className = "cal-cell" + (dateStr === today ? " today" : "");
+  if (dayNum != null) cell.innerHTML = `<div class="cal-daynum">${dayNum}</div>`;
+
+  const dayTasks = byDate[dateStr] || [];
+  const shown = cap ? dayTasks.slice(0, cap) : dayTasks;
+  shown.forEach(t => cell.appendChild(taskChip(t, dateStr, today)));
+  if (cap && dayTasks.length > shown.length) {
+    const more = document.createElement("div");
+    more.className = "cal-more";
+    more.textContent = `+${dayTasks.length - shown.length} more`;
+    cell.appendChild(more);
+  }
+
+  // Click an empty part of the day → prefill the add form with that due date
+  cell.addEventListener("click", () => {
+    if (editingId) cancelEdit();
+    document.getElementById("dueInput").value = dateStr;
+    document.getElementById("titleInput").focus();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  return cell;
+}
+
+// Set the weekday header row contents (month/week use 7 cols, day uses 1).
+function setWeekdayHeader(cells) {
+  const wd = document.getElementById("calWeekdays");
+  wd.innerHTML = "";
+  cells.forEach(html => {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    wd.appendChild(d);
+  });
+}
+
+// Sunday that starts the week containing `date`.
+function weekStart(date) {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());   // getDay(): 0=Sun … 6=Sat
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// --- Mode dispatcher ---
+function renderCalendar() {
+  const wrap = document.getElementById("calWrap");
+  wrap.classList.toggle("week-mode", calMode === "week");
+  wrap.classList.toggle("day-mode", calMode === "day");
+  if (calMode === "week") renderWeek();
+  else if (calMode === "day") renderDay();
+  else renderMonth();
+}
+
+function renderMonth() {
+  const grid = document.getElementById("calGrid");
+  const year = calCursor.getFullYear();
+  const month = calCursor.getMonth();
+  document.getElementById("calTitle").textContent = `${MONTH_NAMES[month]} ${year}`;
+  setWeekdayHeader(WEEKDAY_NAMES);
+
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const byDate = tasksByDate();
+  const today = todayStr();
+  grid.innerHTML = "";
+
+  for (let i = 0; i < firstWeekday; i++) {
+    const blank = document.createElement("div");
+    blank.className = "cal-cell blank";
+    grid.appendChild(blank);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    grid.appendChild(dayCell(ymd(year, month, day), day, byDate, today, 3));
+  }
+}
+
+function renderWeek() {
+  const grid = document.getElementById("calGrid");
+  const start = weekStart(calCursor);                 // Sunday
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  // Title spans the week, e.g. "Jun 14 – 20, 2026"
+  const sameMonth = start.getMonth() === end.getMonth();
+  const startLabel = `${MONTH_NAMES[start.getMonth()].slice(0,3)} ${start.getDate()}`;
+  const endLabel = sameMonth ? `${end.getDate()}` : `${MONTH_NAMES[end.getMonth()].slice(0,3)} ${end.getDate()}`;
+  document.getElementById("calTitle").textContent = `${startLabel} – ${endLabel}, ${end.getFullYear()}`;
+
+  const byDate = tasksByDate();
+  const today = todayStr();
+
+  // Header shows weekday + date number for each of the 7 days
+  const headers = [];
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    days.push(d);
+    headers.push(`${WEEKDAY_NAMES[i]}<span class="cal-wd-num">${d.getDate()}</span>`);
+  }
+  setWeekdayHeader(headers);
+
+  grid.innerHTML = "";
+  days.forEach(d => {
+    grid.appendChild(dayCell(ymd(d.getFullYear(), d.getMonth(), d.getDate()), null, byDate, today, null));
+  });
+}
+
+function renderDay() {
+  const grid = document.getElementById("calGrid");
+  const d = new Date(calCursor);
+  const dateStr = ymd(d.getFullYear(), d.getMonth(), d.getDate());
+  document.getElementById("calTitle").textContent =
+    `${WEEKDAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`;
+  setWeekdayHeader([`${WEEKDAY_NAMES[d.getDay()]} — full day`]);
+
+  const byDate = tasksByDate();
+  const today = todayStr();
+  grid.innerHTML = "";
+  const cell = dayCell(dateStr, null, byDate, today, null);
+  if (!(byDate[dateStr] || []).length) {
+    const empty = document.createElement("div");
+    empty.className = "day-empty";
+    empty.textContent = "No tasks due this day. Click anywhere here to add one.";
+    cell.appendChild(empty);
+  }
+  grid.appendChild(cell);
+}
+
 // --- View router (extend here for future views) ---
 const VIEWS = {
   list: renderList,
   kanban: renderKanban,
-  // calendar: renderCalendar,
+  calendar: renderCalendar,
   // gantt: renderGantt,
 };
 function render() {
   // Show only the active view's section
   document.getElementById("view-list").style.display = currentView === "list" ? "" : "none";
   document.getElementById("view-kanban").style.display = currentView === "kanban" ? "" : "none";
+  document.getElementById("view-calendar").style.display = currentView === "calendar" ? "" : "none";
   (VIEWS[currentView] || renderList)();
 }
 
@@ -543,6 +808,30 @@ document.getElementById("addForm").addEventListener("submit", e => {
 });
 
 document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
+
+// Calendar navigation — steps by the active unit (month / week / day)
+function calStep(dir) {
+  if (calMode === "month") calCursor.setMonth(calCursor.getMonth() + dir);
+  else if (calMode === "week") calCursor.setDate(calCursor.getDate() + 7 * dir);
+  else calCursor.setDate(calCursor.getDate() + dir);
+  renderCalendar();
+}
+document.getElementById("calPrev").addEventListener("click", () => calStep(-1));
+document.getElementById("calNext").addEventListener("click", () => calStep(1));
+document.getElementById("calToday").addEventListener("click", () => {
+  calCursor = new Date();
+  if (calMode === "month") calCursor.setDate(1);  // month view anchors on the 1st
+  renderCalendar();
+});
+
+// Month / Week / Day toggle
+document.getElementById("calModes").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  calMode = btn.dataset.mode;
+  document.querySelectorAll("#calModes button").forEach(b => b.classList.toggle("active", b === btn));
+  renderCalendar();
+});
 
 document.getElementById("filterStatus").addEventListener("change", render);
 document.getElementById("sortBy").addEventListener("change", render);

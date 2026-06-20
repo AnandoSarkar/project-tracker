@@ -12,6 +12,7 @@
     --muted: #6b778c;
     --line: #dfe1e6;
     --accent: #0c66e4;
+    --done: #5e6c84;
     --now: #1f845a;
     --next: #b25e02;
     --later: #5e4db2;
@@ -34,12 +35,14 @@
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 620px) { .board { grid-template-columns: 1fr; } }
 
   .col { background: #ebecf0; border-radius: 10px; padding: 12px; }
   .col h2 { margin: 4px 6px 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
   .col h2 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: auto; }
+  .col.done h2 .dot { background: var(--done); }
   .col.now h2 .dot { background: var(--now); }
   .col.next h2 .dot { background: var(--next); }
   .col.later h2 .dot { background: var(--later); }
@@ -56,6 +59,9 @@
     transition: transform .08s ease, box-shadow .08s ease;
   }
   .card:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(9,30,66,.18); }
+  .done .card { border-left-color: var(--done); }
+  .done .card h3 { color: var(--muted); }
+  .done .card .ship { display: inline-block; margin-top: 6px; margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--now); }
   .now .card { border-left-color: var(--now); }
   .next .card { border-left-color: var(--next); }
   .later .card { border-left-color: var(--later); }
@@ -82,6 +88,7 @@
   <div class="wrap">
     <p class="hint">Tip: tackle them roughly left-to-right, top-to-bottom. Each card notes the new skill it teaches and a rough effort level.</p>
     <div class="legend">
+      <span><i class="dot" style="background:var(--done)"></i> Done — shipped ✅</span>
       <span><i class="dot" style="background:var(--now)"></i> Now — your immediate next steps</span>
       <span><i class="dot" style="background:var(--next)"></i> Next — once the basics feel solid</span>
       <span><i class="dot" style="background:var(--later)"></i> Later — stretch goals</span>
@@ -94,22 +101,46 @@
 
 <script>
 const ROADMAP = {
-  now: {
-    title: "Now",
-    note: "next steps",
+  done: {
+    title: "Done",
+    note: "shipped",
     items: [
       {
-        t: "Kanban board view",
-        learn: "DOM rendering + drag & drop",
-        effort: "Medium",
-        d: "Columns for To Do / In Progress / Done with draggable cards. The code already has a disabled Kanban tab and a VIEWS router waiting — you write one renderKanban() function and enable the tab. Teaches you the HTML Drag-and-Drop API and how a view-switcher architecture pays off."
+        t: "List view + publish to web",
+        learn: "The full create → publish flow",
+        ship: "Shipped",
+        d: "The first version: a working task list saved to the browser, then published live to GitHub Pages. You learned the whole pipeline — build → Git → deploy → live URL."
       },
       {
         t: "Edit an existing task",
         learn: "Reusing form state for create + edit",
-        effort: "Small",
-        d: "Right now you can add and delete but not edit a task's title or date. Add an inline edit (or a small modal). Teaches you how one form can serve two modes, a pattern you'll use constantly."
+        ship: "Shipped",
+        d: "Done ✅ — clicking ✏️ fills the shared form with the task's values, the button becomes Save, and submitting updates in place. You learned the 'one form, two modes' pattern (a single editingId state variable decides add vs. edit)."
       },
+      {
+        t: "Kanban board view",
+        learn: "DOM rendering + drag & drop",
+        ship: "Shipped",
+        d: "Done ✅ — three columns with draggable cards; dropping a card changes its status and persists. You learned the HTML Drag-and-Drop API (the must-have preventDefault() in dragover) and saw the view-switcher architecture pay off — Kanban was just one renderKanban() function plus enabling the tab."
+      },
+      {
+        t: "Calendar (month) view",
+        learn: "Working with dates & grids",
+        ship: "Shipped",
+        d: "Done ✅ — a month grid with prev/next/today navigation, tasks placed on their due dates, overdue/done styling, and click-a-day to prefill the form. You learned date math: which weekday the 1st falls on (leading blanks) and days-in-month via 'day 0 of next month', plus the leap-year edge cases."
+      },
+      {
+        t: "Calendar Month / Week / Day toggle",
+        learn: "One view, multiple modes via shared helpers",
+        ship: "Shipped",
+        d: "Done ✅ — a segmented toggle switches the calendar between Month, Week, and Day; prev/next/today step by the active unit and the title reformats to match. You learned to factor shared building blocks (group-by-date, build a chip, build a day cell) and a calMode dispatcher instead of three copy-pasted renderers — plus weekStart() math that rolls cleanly across month/year boundaries."
+      }
+    ]
+  },
+  now: {
+    title: "Now",
+    note: "next steps",
+    items: [
       {
         t: "Task priority + colour tags",
         learn: "Extending your data model safely",
@@ -122,12 +153,6 @@ const ROADMAP = {
     title: "Next",
     note: "once basics feel solid",
     items: [
-      {
-        t: "Calendar (month) view",
-        learn: "Working with dates & grids",
-        effort: "Medium",
-        d: "A month grid that drops each task onto its due date. Teaches you date math (first day of month, days in month, week alignment) and building a grid layout — genuinely useful date-handling skills."
-      },
       {
         t: "Search & quick filters",
         learn: "Live filtering UX",
@@ -179,10 +204,10 @@ Object.keys(ROADMAP).forEach(key => {
     c.className = "card";
     c.innerHTML = `
       <h3>${item.t}<span class="chev">▶</span></h3>
-      <span class="learn">${item.learn}</span>
+      <span class="learn">${item.learn}</span>${item.ship ? `<span class="ship">✓ ${item.ship}</span>` : ""}
       <div class="detail">
         <p style="margin:0 0 6px">${item.d}</p>
-        <div class="effort">Effort: <b>${item.effort}</b></div>
+        ${item.effort ? `<div class="effort">Effort: <b>${item.effort}</b></div>` : ""}
       </div>`;
     c.addEventListener("click", () => c.classList.toggle("open"));
     wrap.appendChild(c);
