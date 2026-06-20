@@ -141,6 +141,51 @@
   .editing-banner.show { display: block; }
 
   .empty { text-align: center; color: var(--muted); padding: 50px 20px; border: 2px dashed var(--line); border-radius: 8px; }
+
+  /* Kanban board */
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
+  .column {
+    background: #ebecf0;
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 120px;
+    transition: background .12s ease, outline-color .12s ease;
+    outline: 2px dashed transparent;
+  }
+  .column.drag-over { background: var(--accent-soft); outline-color: var(--accent); }
+  .column h2 {
+    margin: 4px 6px 10px;
+    font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .column h2 .col-count {
+    margin-left: auto; background: #d5d8df; color: var(--muted);
+    border-radius: 999px; font-size: 11px; padding: 1px 8px; letter-spacing: 0;
+  }
+  .kcard {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow);
+    cursor: grab;
+  }
+  .kcard:active { cursor: grabbing; }
+  .kcard.dragging { opacity: .4; }
+  .kcard.todo { border-left-color: var(--muted); }
+  .kcard.doing { border-left-color: var(--amber); }
+  .kcard.done { border-left-color: var(--green); }
+  .kcard .ktitle { font-size: 14px; font-weight: 500; word-break: break-word; }
+  .kcard.done .ktitle { text-decoration: line-through; color: var(--muted); }
+  .kcard .kmeta { font-size: 12px; color: var(--muted); margin-top: 5px; display: flex; align-items: center; gap: 10px; }
+  .kcard .kactions { margin-left: auto; display: flex; gap: 2px; }
+  .col-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 16px 8px; }
+  .kboard-hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
 </style>
 </head>
@@ -154,28 +199,29 @@
     <!-- View switcher: List works now; others are stubbed for later -->
     <div class="tabs" id="tabs">
       <button class="tab active" data-view="list">List</button>
-      <button class="tab" data-view="kanban" disabled>Kanban<span class="soon">soon</span></button>
+      <button class="tab" data-view="kanban">Kanban</button>
       <button class="tab" data-view="calendar" disabled>Calendar<span class="soon">soon</span></button>
       <button class="tab" data-view="gantt" disabled>Gantt<span class="soon">soon</span></button>
     </div>
 
+    <!-- SHARED add/edit form (used by every view) -->
+    <form class="add-form" id="addForm">
+      <input type="text" id="titleInput" placeholder="New task…" required />
+      <input type="date" id="dueInput" title="Due date" />
+      <select id="statusInput" title="Status">
+        <option value="todo">To Do</option>
+        <option value="doing">In Progress</option>
+        <option value="done">Done</option>
+      </select>
+      <div class="form-actions">
+        <button class="btn" type="submit" id="submitBtn">Add</button>
+        <button class="btn-secondary" type="button" id="cancelEditBtn" style="display:none">Cancel</button>
+      </div>
+    </form>
+    <div class="editing-banner" id="editingBanner">✏️ Editing task — make your changes and click Save.</div>
+
     <!-- LIST VIEW -->
     <section id="view-list">
-      <form class="add-form" id="addForm">
-        <input type="text" id="titleInput" placeholder="New task…" required />
-        <input type="date" id="dueInput" title="Due date" />
-        <select id="statusInput" title="Status">
-          <option value="todo">To Do</option>
-          <option value="doing">In Progress</option>
-          <option value="done">Done</option>
-        </select>
-        <div class="form-actions">
-          <button class="btn" type="submit" id="submitBtn">Add</button>
-          <button class="btn-secondary" type="button" id="cancelEditBtn" style="display:none">Cancel</button>
-        </div>
-      </form>
-      <div class="editing-banner" id="editingBanner">✏️ Editing task — make your changes and click Save.</div>
-
       <div class="controls">
         <label for="filterStatus">Filter:</label>
         <select id="filterStatus">
@@ -194,6 +240,12 @@
       </div>
 
       <div class="task-list" id="taskList"></div>
+    </section>
+
+    <!-- KANBAN VIEW -->
+    <section id="view-kanban" style="display:none">
+      <p class="kboard-hint">Drag a card between columns to change its status. 🖐️</p>
+      <div class="board" id="kanbanBoard"></div>
     </section>
   </div>
 
@@ -342,14 +394,105 @@ function renderList() {
   });
 }
 
+// --- Rendering (Kanban view) ---
+const COLUMNS = [
+  { status: "todo", label: "To Do" },
+  { status: "doing", label: "In Progress" },
+  { status: "done", label: "Done" },
+];
+
+function renderKanban() {
+  const boardEl = document.getElementById("kanbanBoard");
+  const today = todayStr();
+  boardEl.innerHTML = "";
+
+  COLUMNS.forEach(col => {
+    const colTasks = tasks
+      .filter(t => t.status === col.status)
+      .sort((a, b) => b.created - a.created);
+
+    const column = document.createElement("div");
+    column.className = "column";
+    column.dataset.status = col.status;
+    column.innerHTML = `<h2>${col.label}<span class="col-count">${colTasks.length}</span></h2>`;
+
+    if (colTasks.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "col-empty";
+      empty.textContent = "Drop tasks here";
+      column.appendChild(empty);
+    }
+
+    colTasks.forEach(t => {
+      const overdue = t.due && t.due < today && t.status !== "done";
+      const card = document.createElement("div");
+      card.className = "kcard " + t.status;
+      card.draggable = true;
+      card.dataset.id = t.id;
+      card.innerHTML = `
+        <div class="ktitle"></div>
+        <div class="kmeta">
+          ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
+          <span class="kactions">
+            <button class="edit" aria-label="Edit task" title="Edit">✏️</button>
+            <button class="del" aria-label="Delete task" title="Delete">✕</button>
+          </span>
+        </div>`;
+      card.querySelector(".ktitle").textContent = t.title;
+
+      // Buttons (stop drag from interfering with clicks)
+      card.querySelector(".edit").addEventListener("click", e => { e.stopPropagation(); startEdit(t.id); });
+      card.querySelector(".del").addEventListener("click", e => {
+        e.stopPropagation();
+        if (confirm("Delete this task?")) deleteTask(t.id);
+      });
+
+      // Drag source events
+      card.addEventListener("dragstart", e => {
+        card.classList.add("dragging");
+        e.dataTransfer.setData("text/plain", t.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+
+      column.appendChild(card);
+    });
+
+    // Drop target events
+    column.addEventListener("dragover", e => {
+      e.preventDefault();                       // required to allow a drop
+      e.dataTransfer.dropEffect = "move";
+      column.classList.add("drag-over");
+    });
+    column.addEventListener("dragleave", e => {
+      // only clear when actually leaving the column, not entering a child
+      if (!column.contains(e.relatedTarget)) column.classList.remove("drag-over");
+    });
+    column.addEventListener("drop", e => {
+      e.preventDefault();
+      column.classList.remove("drag-over");
+      const id = e.dataTransfer.getData("text/plain");
+      const t = tasks.find(t => t.id === id);
+      if (t && t.status !== col.status) {
+        updateTask(id, { status: col.status });  // updateTask saves + re-renders
+      }
+    });
+
+    boardEl.appendChild(column);
+  });
+}
+
 // --- View router (extend here for future views) ---
 const VIEWS = {
   list: renderList,
-  // kanban: renderKanban,
+  kanban: renderKanban,
   // calendar: renderCalendar,
   // gantt: renderGantt,
 };
 function render() {
+  // Show only the active view's section
+  document.getElementById("view-list").style.display = currentView === "list" ? "" : "none";
+  document.getElementById("view-kanban").style.display = currentView === "kanban" ? "" : "none";
   (VIEWS[currentView] || renderList)();
 }
 
