@@ -129,6 +129,20 @@
     background: var(--card); color: var(--ink);
   }
   .notes-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  /* Checklist editor inside the add/edit form */
+  .subtasks-editor { grid-column: 1 / -1; }
+  .se-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .se-list:empty { margin: 0; }
+  .se-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .se-item .se-text { flex: 1; word-break: break-word; }
+  .se-item .se-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; line-height: 1; }
+  .se-item .se-remove:hover { color: var(--red); }
+  .se-add { display: flex; gap: 8px; }
+  .se-add input {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  .se-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   .btn {
     background: var(--accent);
     color: #fff;
@@ -298,9 +312,32 @@
     border-radius: 0 0 8px 8px;
     margin: -2px 0 0 4px;            /* tuck under the card, aligned past the status stripe */
     padding: 10px 14px;
-    font-size: 13px; color: var(--ink); white-space: pre-wrap; word-break: break-word;
+    font-size: 13px; color: var(--ink); word-break: break-word;
   }
   .task-item.notes-open .notes-panel { display: block; }
+  .panel-notes { white-space: pre-wrap; margin-bottom: 8px; }
+
+  /* Progress badge in the meta row (e.g. ☑ 2/5) */
+  .subtask-progress {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    background: var(--col-bg); border-radius: 999px; padding: 1px 8px;
+  }
+  .subtask-progress.complete { color: var(--green); }
+
+  /* Interactive checklist inside the detail panel */
+  .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+  .checklist-item { display: flex; align-items: center; gap: 8px; }
+  .checklist-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+  .checklist-text { flex: 1; word-break: break-word; }
+  .checklist-item.done .checklist-text { text-decoration: line-through; color: var(--muted); }
+  .checklist-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 4px; line-height: 1; }
+  .checklist-remove:hover { color: var(--red); }
+  .checklist-add { display: flex; gap: 8px; margin-top: 8px; }
+  .checklist-add input {
+    flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  .checklist-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
   /* Mobile task card: title gets its own full-width row so it stops wrapping into
      a narrow column, and the controls (status / edit / delete) drop to a second
@@ -542,6 +579,13 @@
         <option value="">No project</option>
       </select>
       <textarea id="notesInput" class="notes-input" placeholder="Notes (optional)…" rows="2"></textarea>
+      <div class="subtasks-editor" id="subtasksEditor">
+        <ul class="se-list" id="draftSubtaskList"></ul>
+        <div class="se-add">
+          <input type="text" id="draftSubtaskInput" placeholder="Add a checklist item…" aria-label="Add a checklist item" />
+          <button type="button" class="btn-secondary" id="draftSubtaskAdd">+ Item</button>
+        </div>
+      </div>
       <div class="form-actions">
         <button class="btn" type="submit" id="submitBtn">Add</button>
         <button class="btn-secondary" type="button" id="cancelEditBtn" style="display:none">Cancel</button>
@@ -686,6 +730,41 @@ function applyFormOpen() {
   }
 }
 
+// Render the draft checklist inside the form from the draftSubtasks array.
+function renderDraftSubtasks() {
+  const listEl = document.getElementById("draftSubtaskList");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  draftSubtasks.forEach(s => {
+    const li = document.createElement("li");
+    li.className = "se-item";
+    const text = document.createElement("span");
+    text.className = "se-text";
+    text.textContent = (s.done ? "✓ " : "") + s.text;   // show done state if editing an existing item
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "se-remove";
+    rm.textContent = "✕";
+    rm.setAttribute("aria-label", "Remove item");
+    rm.addEventListener("click", () => {
+      draftSubtasks = draftSubtasks.filter(x => x.id !== s.id);
+      renderDraftSubtasks();
+    });
+    li.append(text, rm);
+    listEl.appendChild(li);
+  });
+}
+// Add an item to the draft list from the form's input.
+function addDraftSubtask() {
+  const input = document.getElementById("draftSubtaskInput");
+  const clean = input.value.trim();
+  if (!clean) return;
+  draftSubtasks.push({ id: uid(), text: clean, done: false });
+  input.value = "";
+  renderDraftSubtasks();
+  input.focus();
+}
+
 // --- State ---
 let tasks = load();
 let projects = loadProjects();
@@ -697,6 +776,8 @@ let calMode = "month";                              // "month" | "week" | "day"
 let searchText = "";                                // live search query (list view)
 let activeChips = { overdue: false, high: false };  // quick-filter toggles
 let formOpen = false;                               // mobile: is the collapsed add-form expanded?
+let draftSubtasks = [];                             // checklist items being built in the form (before save)
+let openDetailIds = new Set();                      // task ids whose detail panel is expanded (survives re-render)
 
 // --- Persistence ---
 function load() {
@@ -721,8 +802,23 @@ function normalizeTask(t) {
     priority: ["none", "low", "med", "high"].includes(t.priority) ? t.priority : "none",
     notes: typeof t.notes === "string" ? t.notes : "",   // added later — old/imported tasks default to ""
     projectId: typeof t.projectId === "string" ? t.projectId : "",  // "" = no project
+    subtasks: normalizeSubtasks(t.subtasks),   // nested checklist; old tasks default to []
     created: typeof t.created === "number" ? t.created : Date.now(),
   };
+}
+// Sanitize a subtasks array: keep only valid items, coerce each to {id, text, done}.
+// Drops items with no usable text. Non-arrays become [].
+function normalizeSubtasks(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter(s => s && typeof s === "object" && typeof s.text === "string" && s.text.trim())
+    .map(s => ({ id: s.id || uid(), text: s.text.trim(), done: s.done === true }));
+}
+// Derived progress for a task's checklist: {done, total}. Computed, never stored,
+// so the parent's progress can't drift out of sync with its children.
+function subtaskProgress(t) {
+  const subs = Array.isArray(t.subtasks) ? t.subtasks : [];
+  return { done: subs.filter(s => s.done).length, total: subs.length };
 }
 // Projects are their own objects (one project has many tasks). Same defaults-first
 // pattern as normalizeTask so imported/old project data is filled in safely.
@@ -795,7 +891,7 @@ function ymd(year, month, day) {
 }
 
 // --- CRUD ---
-function addTask(title, due, status, priority, notes, projectId) {
+function addTask(title, due, status, priority, notes, projectId, subtasks) {
   tasks.push({
     id: uid(),
     title: title.trim(),
@@ -804,6 +900,7 @@ function addTask(title, due, status, priority, notes, projectId) {
     priority: priority || "none",
     notes: (notes || "").trim(),
     projectId: projectId || "",
+    subtasks: normalizeSubtasks(subtasks),
     created: Date.now(),
   });
   save();
@@ -819,6 +916,33 @@ function updateTask(id, changes) {
 function deleteTask(id) {
   tasks = tasks.filter(t => t.id !== id);
   if (editingId === id) cancelEdit();  // bail out of edit mode if we deleted the task being edited
+  save();
+  render();
+}
+
+// --- Subtask CRUD (operate on a parent task's nested array) ---
+function addSubtask(taskId, text) {
+  const t = tasks.find(t => t.id === taskId);
+  const clean = (text || "").trim();
+  if (!t || !clean) return;
+  if (!Array.isArray(t.subtasks)) t.subtasks = [];
+  t.subtasks.push({ id: uid(), text: clean, done: false });
+  save();
+  render();
+}
+function toggleSubtask(taskId, subId) {
+  const t = tasks.find(t => t.id === taskId);
+  if (!t) return;
+  const s = (t.subtasks || []).find(s => s.id === subId);
+  if (!s) return;
+  s.done = !s.done;
+  save();
+  render();
+}
+function deleteSubtask(taskId, subId) {
+  const t = tasks.find(t => t.id === taskId);
+  if (!t || !Array.isArray(t.subtasks)) return;
+  t.subtasks = t.subtasks.filter(s => s.id !== subId);
   save();
   render();
 }
@@ -1063,6 +1187,9 @@ function buildTaskItem(t, today) {
 
   const overdue = t.due && t.due < today && t.status !== "done";
   const hasNotes = !!(t.notes && t.notes.trim());
+  const prog = subtaskProgress(t);            // {done, total} — derived, never stored
+  const hasSubtasks = prog.total > 0;
+  const hasDetail = hasNotes || hasSubtasks;  // either opens the same expandable panel
 
   card.innerHTML = `
     <input type="checkbox" ${t.status === "done" ? "checked" : ""} aria-label="Mark done" />
@@ -1071,7 +1198,8 @@ function buildTaskItem(t, today) {
       <div class="meta">
         <span class="pill ${t.status}">${STATUS_LABEL[t.status]}</span>
         ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
-        ${hasNotes ? `<button class="notes-toggle" aria-expanded="false" title="Show notes">📝 Notes</button>` : ""}
+        ${hasSubtasks ? `<span class="subtask-progress${prog.done === prog.total ? " complete" : ""}">☑ ${prog.done}/${prog.total}</span>` : ""}
+        ${hasDetail ? `<button class="notes-toggle" aria-expanded="false" title="Show details">${hasNotes && hasSubtasks ? "📝 Details" : hasNotes ? "📝 Notes" : "☑ Checklist"}</button>` : ""}
       </div>
     </div>
     <select aria-label="Change status">
@@ -1107,19 +1235,69 @@ function buildTaskItem(t, today) {
 
   item.appendChild(card);
 
-  // Notes: collapsed panel toggled by the 📝 button. Notes are inserted as
-  // textContent (never innerHTML) so a note can't inject markup. white-space
-  // in CSS preserves the user's line breaks.
-  if (hasNotes) {
+  // Expandable detail panel: holds notes (if any) + the interactive checklist.
+  // Toggled by the meta-row button. Notes use textContent so they can't inject markup.
+  if (hasDetail) {
     const panel = document.createElement("div");
     panel.className = "notes-panel";
-    panel.textContent = t.notes;
+
+    if (hasNotes) {
+      const notesEl = document.createElement("div");
+      notesEl.className = "panel-notes";
+      notesEl.textContent = t.notes;
+      panel.appendChild(notesEl);
+    }
+
+    // Interactive checklist: each item toggles/persists immediately; plus an add field.
+    const list = document.createElement("ul");
+    list.className = "checklist";
+    (t.subtasks || []).forEach(s => {
+      const li = document.createElement("li");
+      li.className = "checklist-item" + (s.done ? " done" : "");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = s.done;
+      cb.addEventListener("change", () => toggleSubtask(t.id, s.id));
+      const label = document.createElement("span");
+      label.className = "checklist-text";
+      label.textContent = s.text;            // safe text
+      const rm = document.createElement("button");
+      rm.className = "checklist-remove";
+      rm.type = "button";
+      rm.textContent = "✕";
+      rm.setAttribute("aria-label", "Remove item");
+      rm.addEventListener("click", () => deleteSubtask(t.id, s.id));
+      li.append(cb, label, rm);
+      list.appendChild(li);
+    });
+    panel.appendChild(list);
+
+    // Add-item row inside the panel
+    const addRow = document.createElement("div");
+    addRow.className = "checklist-add";
+    const addInput = document.createElement("input");
+    addInput.type = "text";
+    addInput.placeholder = "Add a checklist item…";
+    addInput.setAttribute("aria-label", "Add a checklist item");
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn-secondary";
+    addBtn.textContent = "+ Item";
+    const doAdd = () => { if (addInput.value.trim()) addSubtask(t.id, addInput.value); };
+    addBtn.addEventListener("click", doAdd);
+    addInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
+    addRow.append(addInput, addBtn);
+    panel.appendChild(addRow);
+
     item.appendChild(panel);
 
     const toggle = card.querySelector(".notes-toggle");
+    // Restore open state across re-renders (ticking an item re-renders the list)
+    if (openDetailIds.has(t.id)) { item.classList.add("notes-open"); toggle.setAttribute("aria-expanded", "true"); }
     toggle.addEventListener("click", () => {
       const open = item.classList.toggle("notes-open");
       toggle.setAttribute("aria-expanded", String(open));
+      if (open) openDetailIds.add(t.id); else openDetailIds.delete(t.id);
     });
   }
 
@@ -1549,6 +1727,9 @@ function startEdit(id) {
   renderProjectFormOptions();   // make sure the dropdown is current before selecting
   document.getElementById("projectInput").value = t.projectId || "";
   document.getElementById("notesInput").value = t.notes || "";
+  // Deep-copy the task's subtasks into the draft so edits aren't committed until Save
+  draftSubtasks = (t.subtasks || []).map(s => ({ id: s.id, text: s.text, done: s.done }));
+  renderDraftSubtasks();
   // Flip the UI into edit mode
   document.getElementById("submitBtn").textContent = "Save";
   document.getElementById("cancelEditBtn").style.display = "";
@@ -1565,6 +1746,8 @@ function cancelEdit() {
   document.getElementById("cancelEditBtn").style.display = "none";
   document.getElementById("addForm").classList.remove("editing");
   document.getElementById("editingBanner").classList.remove("show");
+  draftSubtasks = [];          // clear the checklist draft
+  renderDraftSubtasks();
   formOpen = false;   // collapse the form again on mobile after editing ends
   applyFormOpen();
 }
@@ -1581,19 +1764,27 @@ document.getElementById("addForm").addEventListener("submit", e => {
   if (!title.trim()) return;
 
   if (editingId) {
-    // Edit mode: update the existing task
-    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, projectId, notes: notes.trim() });
+    // Edit mode: update the existing task (draftSubtasks holds the edited checklist)
+    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, projectId, notes: notes.trim(), subtasks: normalizeSubtasks(draftSubtasks) });
     cancelEdit();
   } else {
     // Add mode: create a new task
-    addTask(title, due, status, priority, notes, projectId);
+    addTask(title, due, status, priority, notes, projectId, draftSubtasks);
     e.target.reset();
+    draftSubtasks = [];
+    renderDraftSubtasks();
     formOpen = false;          // collapse on mobile so the new task is visible
     applyFormOpen();
   }
 });
 
 document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
+
+// Checklist editor in the form: add item via button or Enter (Enter must NOT submit the task)
+document.getElementById("draftSubtaskAdd").addEventListener("click", addDraftSubtask);
+document.getElementById("draftSubtaskInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addDraftSubtask(); }
+});
 
 // Calendar navigation — steps by the active unit (month / week / day)
 function calStep(dir) {

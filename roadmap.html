@@ -187,6 +187,18 @@ const ROADMAP = {
         learn: "A one-to-many data relationship",
         ship: "Shipped",
         d: "Done ✅ — your first real one-to-many relationship. Projects are now their own objects (stored in a separate localStorage key) and each task references one via a projectId (\"\" = no project, added through the usual backward-compatible migration). A 📁 Projects panel adds/renames/deletes projects — and deleting a project reassigns its tasks to 'No project' instead of orphaning them. A global project picker filters every view (List, Kanban, Calendar), and the List view groups tasks under project headings when 'All projects' is selected. Export/import carry projects too, remapping ids on merge so task→project links survive. Verified with 15 Node tests (migrations, delete-reassign, grouping order) + live."
+      },
+      {
+        t: "Kanban filters",
+        learn: "Shared state across views",
+        ship: "Shipped",
+        d: "Done ✅ — the Kanban board got its own project picker + Overdue/High-priority chips. The key idea: they share state with the List view's filters (the same projectFilter and activeChips variables) rather than duplicating it, so a filter set in one view shows up in the other and they can't drift. syncProjectControls() and syncChipControls() reflect the shared state onto both views' controls each render. Only wrinkle was HTML's unique-id rule, so the Kanban controls use k-prefixed ids pointing at the same state."
+      },
+      {
+        t: "Subtasks / checklists",
+        learn: "Nested arrays + derived progress",
+        ship: "Shipped",
+        d: "Done ✅ — each task can hold a checklist of {id, text, done} items. You add items in the add/edit form (a working draftSubtasks array, committed on Save) and tick them off in the List detail panel; cards show a derived progress badge like '☑ 2/5' that turns green when complete. Two lessons: storing an array INSIDE each task (a nested migration, normalizeSubtasks, defaulting old tasks to []), and DERIVED state — progress is computed from the children every render via subtaskProgress(), never stored, so it can't drift. A subtlety: ticking an item re-renders the list, so an openDetailIds Set preserves which panels stay expanded. Verified with 14 Node tests + live."
       }
     ]
   },
@@ -216,12 +228,6 @@ const ROADMAP = {
         learn: "Backend, auth & APIs",
         effort: "Large",
         d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
-      },
-      {
-        t: "Subtasks / checklists",
-        learn: "Nested lists + derived progress",
-        effort: "Medium",
-        d: "A checklist of sub-items inside a task, with a progress indicator (e.g. 2/5 done). Teaches storing an array within each task and computing derived state — the parent's progress is calculated from its children rather than stored separately."
       },
       {
         t: "Recurring tasks",
