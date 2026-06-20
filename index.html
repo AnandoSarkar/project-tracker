@@ -17,6 +17,38 @@
     --amber: #b25e02;
     --red: #ca3521;
     --shadow: 0 1px 3px rgba(9, 30, 66, 0.13);
+    /* Hard-coded greys reused as variables so dark mode can override them too */
+    --col-bg: #ebecf0;       /* kanban columns, calendar weekday header */
+    --col-bg-2: #e3e8ef;     /* weekend weekday header */
+    --cell-weekend: #f7f8fa; /* shaded weekend day cell */
+    --cell-blank: #fafbfc;   /* blank (leading) calendar cells */
+    --cell-today: #fff8e6;   /* today highlight */
+    --col-count-bg: #d5d8df; /* kanban column count pill */
+    --prio-high-bg: #ffe2dd; --prio-med-bg: #fff0e6; --prio-low-bg: #e9f2ff;
+    --pill-done-bg: #dcfff1;
+  }
+  /* Dark theme: same variable NAMES, dark VALUES. Because every rule below
+     already reads from these variables, the whole UI re-themes for free. */
+  [data-theme="dark"] {
+    --bg: #1d2125;
+    --card: #22272b;
+    --ink: #c7d1db;
+    --muted: #8c9bab;
+    --line: #38414a;
+    --accent: #4a92f7;
+    --accent-soft: #1c2f47;
+    --green: #4bce97;
+    --amber: #e2a44a;
+    --red: #f87462;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --col-bg: #1a1d21;
+    --col-bg-2: #15191c;
+    --cell-weekend: #1a1e22;
+    --cell-blank: #1b1f23;
+    --cell-today: #36352a;
+    --col-count-bg: #38414a;
+    --prio-high-bg: #4a2723; --prio-med-bg: #43331f; --prio-low-bg: #1c2f47;
+    --pill-done-bg: #1d3d31;
   }
   * { box-sizing: border-box; }
   body {
@@ -97,9 +129,9 @@
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
     padding: 1px 7px; border-radius: 999px; flex-shrink: 0;
   }
-  .prio-high { background: #ffe2dd; color: var(--red); }
-  .prio-med  { background: #fff0e6; color: var(--amber); }
-  .prio-low  { background: #e9f2ff; color: var(--accent); }
+  .prio-high { background: var(--prio-high-bg); color: var(--red); }
+  .prio-med  { background: var(--prio-med-bg); color: var(--amber); }
+  .prio-low  { background: var(--prio-low-bg); color: var(--accent); }
   .prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .prio-dot-high { background: var(--red); }
   .prio-dot-med  { background: var(--amber); }
@@ -153,9 +185,9 @@
   .task.done .title { text-decoration: line-through; color: var(--muted); }
   .task .meta { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
   .pill { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .pill.todo { background: #ebecf0; color: var(--muted); }
-  .pill.doing { background: #fff0e6; color: var(--amber); }
-  .pill.done { background: #dcfff1; color: var(--green); }
+  .pill.todo { background: var(--col-bg); color: var(--muted); }
+  .pill.doing { background: var(--prio-med-bg); color: var(--amber); }
+  .pill.done { background: var(--pill-done-bg); color: var(--green); }
   .due.overdue { color: var(--red); font-weight: 600; }
   .task select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; font-family: inherit; }
   .del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; }
@@ -185,7 +217,7 @@
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
   .column {
-    background: #ebecf0;
+    background: var(--col-bg);
     border-radius: 10px;
     padding: 10px;
     min-height: 120px;
@@ -200,7 +232,7 @@
     display: flex; align-items: center; gap: 8px;
   }
   .column h2 .col-count {
-    margin-left: auto; background: #d5d8df; color: var(--muted);
+    margin-left: auto; background: var(--col-count-bg); color: var(--muted);
     border-radius: 999px; font-size: 11px; padding: 1px 8px; letter-spacing: 0;
   }
   .kcard {
@@ -255,13 +287,13 @@
      borders. The header row uses the SAME column-gap so its columns line up exactly with the grid. */
   .cal-weekdays {
     display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-    column-gap: 1px; background: #ebecf0;
+    column-gap: 1px; background: var(--col-bg);
   }
   .cal-weekdays div {
     padding: 9px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--muted); font-weight: 700; text-align: center; background: #ebecf0;
+    color: var(--muted); font-weight: 700; text-align: center; background: var(--col-bg);
   }
-  .cal-weekdays div.weekend { color: var(--accent); background: #e3e8ef; }
+  .cal-weekdays div.weekend { color: var(--accent); background: var(--col-bg-2); }
   .cal-grid {
     display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 1px; background: var(--line);            /* the gap shows this colour = gridlines */
@@ -273,12 +305,12 @@
     overflow: hidden;
   }
   .cal-cell:hover { background: var(--accent-soft); }
-  .cal-cell.weekend { background: #f7f8fa; }
+  .cal-cell.weekend { background: var(--cell-weekend); }
   .cal-cell.weekend:hover { background: var(--accent-soft); }
-  .cal-cell.blank { background: #fafbfc; cursor: default; }
-  .cal-cell.blank:hover { background: #fafbfc; }
-  .cal-cell.today { background: #fff8e6; }
-  .cal-cell.today:hover { background: #fff3d6; }
+  .cal-cell.blank { background: var(--cell-blank); cursor: default; }
+  .cal-cell.blank:hover { background: var(--cell-blank); }
+  .cal-cell.today { background: var(--cell-today); }
+  .cal-cell.today:hover { background: var(--cell-today); filter: brightness(1.05); }
   .cal-daynum { font-size: 12px; color: var(--muted); font-weight: 600; }
   .cal-cell.today .cal-daynum {
     background: var(--accent); color: #fff; border-radius: 50%;
@@ -326,6 +358,7 @@
         <p>A simple task tracker that saves to your browser. No login, no server.</p>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙 Dark</button>
         <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">⬇ Export</button>
         <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">⬆ Import</button>
         <!-- Hidden file input that the Import button triggers -->
@@ -432,6 +465,36 @@
 --------------------------------------------------------- */
 
 const STORE_KEY = "projectTracker.tasks.v1";
+const THEME_KEY = "projectTracker.theme";   // stores "light" | "dark" (absent = follow system)
+
+// --- Theme (dark mode) ---
+// Decide which theme to show: an explicit saved choice always wins; otherwise
+// fall back to the OS preference. Pure function (no DOM) so it's unit-testable.
+function resolveTheme(saved, systemPrefersDark) {
+  if (saved === "light" || saved === "dark") return saved;   // user override wins
+  return systemPrefersDark ? "dark" : "light";               // else follow the system
+}
+// Reflect the active theme on <html> and update the toggle button label.
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("themeBtn");
+  if (btn) btn.textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+}
+function systemPrefersDark() {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(resolveTheme(saved, systemPrefersDark()));
+}
+function toggleTheme() {
+  const now = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  const next = now === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);   // toggling makes the choice explicit & sticky
+  applyTheme(next);
+}
+// Apply as early as possible to minimise any flash of the wrong theme.
+initTheme();
 
 // --- State ---
 let tasks = load();
@@ -1103,6 +1166,15 @@ document.querySelectorAll(".chip").forEach(chip => {
     render();
   });
 });
+
+// Dark mode toggle
+document.getElementById("themeBtn").addEventListener("click", toggleTheme);
+// If the user hasn't picked a theme, keep following the OS as it changes live.
+if (window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
+    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? "dark" : "light");
+  });
+}
 
 // Export / Import
 document.getElementById("exportBtn").addEventListener("click", exportTasks);
