@@ -188,6 +188,12 @@ const ROADMAP = {
     note: "stretch goals",
     items: [
       {
+        t: "Mobile redesign / responsive polish",
+        learn: "Responsive design for small screens",
+        effort: "Medium",
+        d: "The app feels busy and cramped on a phone — header buttons, tabs, the add-task form, and the filter bar all compete for space. This task rethinks the small-screen layout: a tighter header, a form that collapses or moves out of the way until needed, and breathing room between controls. Teaches mobile-first responsive design — using media queries and layout choices so the same single page feels uncluttered on a narrow screen while staying full-featured on desktop. (Especially relevant now that it's an installed PWA you'll open on your phone.) HOW TO START: capture screenshots of the live site at an iPhone width (~390px) and run the 'design:design-critique' skill on them to turn the vague 'feels busy' into a concrete fix list; 'design:accessibility-review' will catch small tap targets / contrast issues, and 'design:ux-writing' can tighten any cramped labels. Let the critique drive the to-do list rather than guessing. A critique has already been run — see MOBILE-REDESIGN.md for the prioritised fix list (collapse the form, give task titles their own row, tighten spacing, fix tab/filter wrapping, enlarge the checkbox tap target)."
+      },
+      {
         t: "Gantt-style timeline",
         learn: "Computed layout from data",
         effort: "Large",

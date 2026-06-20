@@ -131,6 +131,17 @@
   }
   .btn:hover { filter: brightness(1.05); }
 
+  /* Mobile "+ Add task" toggle — hidden on desktop, where the form is always shown */
+  .add-toggle {
+    display: none;
+    width: 100%;
+    align-items: center; gap: 8px;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 12px 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .add-toggle .add-toggle-icon { font-size: 20px; line-height: 1; }
+
   /* Priority badges (colour tags) */
   .prio {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
@@ -146,6 +157,11 @@
   @media (max-width: 640px) {
     .add-form { grid-template-columns: 1fr 1fr; }
     .add-form input:first-child { grid-column: 1 / -1; }
+    /* On mobile the toggle appears and the form is collapsed until opened.
+       body.form-open reveals it. While editing a task we always force it open. */
+    .add-toggle { display: flex; }
+    .add-form { display: none; }
+    body.form-open .add-form { display: grid; }
   }
 
   /* Filter / sort bar */
@@ -219,6 +235,41 @@
   .editing-banner.show { display: block; }
 
   .empty { text-align: center; color: var(--muted); padding: 50px 20px; border: 2px dashed var(--line); border-radius: 8px; }
+
+  /* Mobile task card: title gets its own full-width row so it stops wrapping into
+     a narrow column, and the controls (status / edit / delete) drop to a second
+     row aligned right. Achieved with flex-wrap + ordering, no markup change. */
+  @media (max-width: 640px) {
+    .task { flex-wrap: wrap; gap: 8px 10px; }
+    .task .body { order: 2; flex: 1 1 auto; }           /* title beside the checkbox on row 1 */
+    .task input[type="checkbox"] { order: 1; }
+    .task .title { font-size: 16px; }
+    /* select + edit + delete wrap onto their own row, pushed to the right */
+    .task select { order: 3; margin-left: auto; }
+    .task .edit { order: 4; }
+    .task .del  { order: 5; }
+    /* Bigger, easier-to-hit checkbox, separated from the action buttons */
+    .task input[type="checkbox"] { width: 24px; height: 24px; }
+    .task .edit, .task .del { font-size: 20px; padding: 6px 8px; }
+  }
+
+  /* Mobile layout polish: tighter vertical rhythm, scrollable tabs,
+     stacked filter/sort controls. Keeps the same single page uncluttered. */
+  @media (max-width: 640px) {
+    .wrap { padding: 16px; }
+    /* Tabs scroll sideways instead of wrapping to a broken second row */
+    .tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: 0 0 auto; white-space: nowrap; }
+    /* Filter / sort: each label sits directly above its own control */
+    .controls { gap: 8px 12px; }
+    .controls label { width: 100%; margin-bottom: -4px; }
+    .controls select { flex: 1 1 auto; }
+    .controls .count { width: 100%; margin-left: 0; text-align: right; }
+    /* Trim the gaps between the big sections so tasks come into view sooner */
+    .search-row { margin-bottom: 10px; }
+    .controls { margin-bottom: 10px; }
+  }
 
   /* Kanban board */
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -383,6 +434,12 @@
       <button class="tab" data-view="gantt" disabled>Gantt<span class="soon">soon</span></button>
     </div>
 
+    <!-- Mobile-only toggle: collapses the form so the task list is what you see first.
+         Hidden on desktop via CSS; the form stays open there. -->
+    <button type="button" class="add-toggle" id="addToggle" aria-expanded="false" aria-controls="addForm">
+      <span class="add-toggle-icon">+</span> Add task
+    </button>
+
     <!-- SHARED add/edit form (used by every view) -->
     <form class="add-form" id="addForm">
       <input type="text" id="titleInput" placeholder="New task…" required />
@@ -503,6 +560,27 @@ function toggleTheme() {
 // Apply as early as possible to minimise any flash of the wrong theme.
 initTheme();
 
+// --- Mobile add-form collapse ---
+// Pure helper: given the current open state and whether we're editing,
+// decide if the form should be visible. Editing always forces it open
+// (you can't edit a task through a collapsed form). Testable in Node.
+function shouldFormBeOpen(open, isEditing) {
+  return Boolean(open || isEditing);
+}
+// Reflect the form-open state onto the DOM (body class + button label/aria).
+function applyFormOpen() {
+  const open = shouldFormBeOpen(formOpen, editingId !== null);
+  document.body.classList.toggle("form-open", open);
+  const toggle = document.getElementById("addToggle");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(open));
+    // While editing, the toggle is irrelevant (form is forced open); otherwise
+    // it flips between opening and closing the form.
+    toggle.querySelector(".add-toggle-icon").textContent = open ? "×" : "+";
+    toggle.childNodes[toggle.childNodes.length - 1].textContent = open ? " Close" : " Add task";
+  }
+}
+
 // --- State ---
 let tasks = load();
 let currentView = "list";
@@ -511,6 +589,7 @@ let calCursor = new Date(); calCursor.setDate(1);  // anchor date for the calend
 let calMode = "month";                              // "month" | "week" | "day"
 let searchText = "";                                // live search query (list view)
 let activeChips = { overdue: false, high: false };  // quick-filter toggles
+let formOpen = false;                               // mobile: is the collapsed add-form expanded?
 
 // --- Persistence ---
 function load() {
@@ -1096,6 +1175,7 @@ function startEdit(id) {
   document.getElementById("cancelEditBtn").style.display = "";
   document.getElementById("addForm").classList.add("editing");
   document.getElementById("editingBanner").classList.add("show");
+  applyFormOpen();   // editing forces the (mobile) form open so it's visible
   document.getElementById("titleInput").focus();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1106,6 +1186,8 @@ function cancelEdit() {
   document.getElementById("cancelEditBtn").style.display = "none";
   document.getElementById("addForm").classList.remove("editing");
   document.getElementById("editingBanner").classList.remove("show");
+  formOpen = false;   // collapse the form again on mobile after editing ends
+  applyFormOpen();
 }
 
 // --- Event wiring ---
@@ -1125,7 +1207,8 @@ document.getElementById("addForm").addEventListener("submit", e => {
     // Add mode: create a new task
     addTask(title, due, status, priority);
     e.target.reset();
-    document.getElementById("titleInput").focus();
+    formOpen = false;          // collapse on mobile so the new task is visible
+    applyFormOpen();
   }
 });
 
@@ -1173,6 +1256,16 @@ document.querySelectorAll(".chip").forEach(chip => {
     render();
   });
 });
+
+// Mobile add-form toggle
+document.getElementById("addToggle").addEventListener("click", () => {
+  // If editing, the form is forced open; closing it should cancel the edit.
+  if (editingId !== null) { cancelEdit(); return; }
+  formOpen = !formOpen;
+  applyFormOpen();
+  if (formOpen) document.getElementById("titleInput").focus();
+});
+applyFormOpen();  // set initial state on load
 
 // Dark mode toggle
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);

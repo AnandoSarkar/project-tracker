@@ -27,6 +27,7 @@ A simple **project/task tracker web app**, built as a learning project to practi
 | `PUBLISH-GUIDE.md` | How to deploy to the web (GitHub + Pages). |
 | `BRANCHING-GUIDE.md` | Git feature-branch workflow (branch → commit → merge). |
 | `TESTING-GUIDE.md` | What/why/how of testing, grounded in this app's code. |
+| `MOBILE-REDESIGN.md` | Design-critique notes + prioritised fix list for the mobile/responsive redesign (Later). |
 | `CLAUDE.md` | This file. |
 
 ## How the app is architected
@@ -78,7 +79,7 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 - **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** Gantt timeline, cloud sync (accounts + DB), project grouping, task notes/descriptions, subtasks/checklists, recurring tasks.
+- **Later:** mobile redesign / responsive polish (phone UI feels busy/cramped), Gantt timeline, cloud sync (accounts + DB), project grouping, task notes/descriptions, subtasks/checklists, recurring tasks.
 
 ## Gotchas
 
