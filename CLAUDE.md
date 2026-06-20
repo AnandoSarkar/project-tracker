@@ -34,7 +34,8 @@ A simple **project/task tracker web app**, built as a learning project to practi
 
 - **View switcher.** Tabs (List, Kanban, Calendar; Gantt is stubbed/disabled). A `VIEWS` object maps a view name to its render function, and `render()` dispatches to the active one. **Adding a view = write one render function + enable its tab.** Preserve this pattern.
 - **State** lives in module-level variables: `tasks` (the data), `currentView`, `editingId`, `calCursor`, `calMode`, `searchText`, `activeChips`.
-- **Persistence.** `load()` reads/parses `localStorage`; `save()` writes it. `load()` runs every task through `normalizeTask()`.
+- **Persistence.** `load()` reads/parses `localStorage`; `save()` writes it. `load()` runs every task through `normalizeTask()`. Projects live in a separate key (`PROJECTS_KEY`) via `loadProjects()`/`saveProjects()`, normalised through `normalizeProject()`.
+- **Projects (one-to-many).** Projects are their own objects; a task references one via `projectId` (`""` = none). Deleting a project reassigns its tasks to `""` rather than orphaning them. A global `projectFilter` narrows every view; List view also groups under project headings when the filter is "all". `syncProjectControls()` rebuilds the panel + both dropdowns on each render.
 - **`normalizeTask(t)`** is the backward-compatibility layer: it sets safe defaults then lets existing values win, so older/imported data gains any missing fields (e.g. `priority`). **Any new task field must be added here** so old saved data keeps working.
 - **Shared add/edit form.** One form does both create and edit, switched by `editingId` (null = add, otherwise the id being edited) — the "one form, two modes" pattern.
 - **Calendar.** Weeks start **Monday**. `mondayIndex(date)` converts JS's Sunday-based `getDay()` to Monday-based. `weekStart()`, `isWeekend()` derive from it. Month/Week/Day modes share helpers (`tasksByDate`, `taskChip`, `dayCell`) and a `calMode` dispatcher. Grid columns use `repeat(7, minmax(0, 1fr))` so a long task title clips instead of widening its column.
@@ -49,6 +50,17 @@ A simple **project/task tracker web app**, built as a learning project to practi
   status: "todo" | "doing" | "done",
   priority: "none" | "low" | "med" | "high",
   notes: string,         // free-text, may be multi-line; "" when empty
+  projectId: string,     // id of the owning project, or "" for no project
+  created: number        // Date.now() timestamp
+}
+```
+
+## Project data shape
+
+```js
+{
+  id: string,            // unique, from uid()
+  name: string,
   created: number        // Date.now() timestamp
 }
 ```
@@ -78,9 +90,9 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 ## Roadmap status (keep in sync with roadmap.html)
 
-- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view).
+- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view), project grouping (projects as separate objects, projectId on tasks, management panel, global filter across views + grouped List headings).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** Gantt timeline, cloud sync (accounts + DB), project grouping, subtasks/checklists, recurring tasks.
+- **Later:** Gantt timeline, cloud sync (accounts + DB), subtasks/checklists, recurring tasks.
 
 ## Gotchas
 

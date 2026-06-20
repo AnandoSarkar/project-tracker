@@ -181,6 +181,12 @@ const ROADMAP = {
         learn: "Richer fields + detail views",
         ship: "Shipped",
         d: "Done ✅ — each task can now hold a free-text notes field. In List view a task with notes shows a 📝 toggle that expands an inline detail panel beneath the card, keeping the card compact (the 'summary vs. detail' pattern). Lessons: extending the data model with another backward-compatible normalizeTask() migration (old tasks default to notes:''), reusing the shared add/edit form (now with a textarea), and rendering multi-line text safely — inserted via textContent (never innerHTML) with white-space:pre-wrap to preserve line breaks. Verified with Node (migration + save/load round-trip) and live."
+      },
+      {
+        t: "Project grouping",
+        learn: "A one-to-many data relationship",
+        ship: "Shipped",
+        d: "Done ✅ — your first real one-to-many relationship. Projects are now their own objects (stored in a separate localStorage key) and each task references one via a projectId (\"\" = no project, added through the usual backward-compatible migration). A 📁 Projects panel adds/renames/deletes projects — and deleting a project reassigns its tasks to 'No project' instead of orphaning them. A global project picker filters every view (List, Kanban, Calendar), and the List view groups tasks under project headings when 'All projects' is selected. Export/import carry projects too, remapping ids on merge so task→project links survive. Verified with 15 Node tests (migrations, delete-reassign, grouping order) + live."
       }
     ]
   },
@@ -210,12 +216,6 @@ const ROADMAP = {
         learn: "Backend, auth & APIs",
         effort: "Large",
         d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
-      },
-      {
-        t: "Project grouping",
-        learn: "A one-to-many data relationship",
-        effort: "Medium",
-        d: "Organize tasks under multiple projects, with a project picker to filter each view. Teaches modelling a parent/child relationship (a project has many tasks) and adding a 'projectId' to your task shape — another safe, backward-compatible migration."
       },
       {
         t: "Subtasks / checklists",

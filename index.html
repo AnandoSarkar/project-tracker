@@ -119,6 +119,8 @@
     font-family: inherit;
   }
   .add-form input:focus, .add-form select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  /* Project select spans the full form width on its own row */
+  #projectInput { grid-column: 1 / -1; }
   /* Notes textarea spans the full form width on its own row */
   .notes-input {
     grid-column: 1 / -1;
@@ -149,6 +151,33 @@
     margin-bottom: 12px;
   }
   .add-toggle .add-toggle-icon { font-size: 20px; line-height: 1; }
+
+  /* Projects management panel */
+  .projects-panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 20px; box-shadow: var(--shadow);
+  }
+  .pp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .pp-head h2 { margin: 0; font-size: 15px; }
+  .pp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px; line-height: 1; }
+  .pp-close:hover { color: var(--red); }
+  .pp-add { display: flex; gap: 8px; margin-bottom: 12px; }
+  .pp-add input {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  .pp-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .pp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .pp-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+  .pp-item .pp-name { flex: 1; font-size: 14px; word-break: break-word; }
+  .pp-item .pp-count { font-size: 12px; color: var(--muted); }
+  .pp-item button {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 13px; font-weight: 600; padding: 4px 6px; font-family: inherit;
+  }
+  .pp-item .pp-rename:hover { color: var(--accent); }
+  .pp-item .pp-delete:hover { color: var(--red); }
+  .pp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 
   /* Priority badges (colour tags) */
   .prio {
@@ -247,6 +276,17 @@
   /* Task notes: a 📝 toggle in the meta row + a collapsed detail panel.
      The wrapper lets the panel sit full-width below the card (summary vs. detail). */
   .task-item { display: flex; flex-direction: column; }
+  /* Project group heading in the List view */
+  .project-heading {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 14px 2px 4px;
+  }
+  .project-heading:first-child { margin-top: 0; }
+  .project-heading-count {
+    background: var(--col-bg); color: var(--muted);
+    border-radius: 999px; font-size: 11px; padding: 1px 8px; letter-spacing: 0;
+  }
   .notes-toggle {
     background: none; border: none; cursor: pointer; padding: 0;
     font-size: 12px; font-weight: 600; color: var(--accent); font-family: inherit;
@@ -340,6 +380,9 @@
   .kcard .kactions { margin-left: auto; display: flex; gap: 2px; }
   .col-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 16px 8px; }
   .kboard-hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+  .kfilter-label { font-size: 13px; color: var(--muted); }
+  .kfilter-select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink); }
+  .kfilter-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
   /* Calendar */
   .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -442,6 +485,7 @@
         <p>A simple task tracker that saves to your browser. No login, no server.</p>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn-ghost" id="projectsBtn" title="Manage projects">📁 Projects</button>
         <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙 Dark</button>
         <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">⬇ Export</button>
         <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">⬆ Import</button>
@@ -452,6 +496,19 @@
   </header>
 
   <div class="wrap">
+    <!-- Projects management panel (collapsible). Hidden until the Projects button is clicked. -->
+    <section class="projects-panel" id="projectsPanel" hidden>
+      <div class="pp-head">
+        <h2>Projects</h2>
+        <button type="button" class="pp-close" id="projectsClose" aria-label="Close projects panel">✕</button>
+      </div>
+      <form class="pp-add" id="projectAddForm">
+        <input type="text" id="projectNameInput" placeholder="New project name…" aria-label="New project name" />
+        <button type="submit" class="btn">Add</button>
+      </form>
+      <ul class="pp-list" id="projectList"></ul>
+    </section>
+
     <!-- View switcher: List works now; others are stubbed for later -->
     <div class="tabs" id="tabs">
       <button class="tab active" data-view="list">List</button>
@@ -481,6 +538,9 @@
         <option value="med">Medium</option>
         <option value="high">High</option>
       </select>
+      <select id="projectInput" title="Project">
+        <option value="">No project</option>
+      </select>
       <textarea id="notesInput" class="notes-input" placeholder="Notes (optional)…" rows="2"></textarea>
       <div class="form-actions">
         <button class="btn" type="submit" id="submitBtn">Add</button>
@@ -497,6 +557,11 @@
         <button type="button" class="chip" id="chipHigh" data-chip="high">High priority</button>
       </div>
       <div class="controls">
+        <label for="projectFilter">Project:</label>
+        <select id="projectFilter">
+          <option value="all">All projects</option>
+          <option value="none">No project</option>
+        </select>
         <label for="filterStatus">Filter:</label>
         <select id="filterStatus">
           <option value="all">All</option>
@@ -519,6 +584,18 @@
 
     <!-- KANBAN VIEW -->
     <section id="view-kanban" style="display:none">
+      <!-- Filters share state with the List view (projectFilter + activeChips),
+           so a separate set of controls here stays in sync via syncProjectControls()
+           and syncChipControls(). IDs differ because IDs must be unique. -->
+      <div class="search-row">
+        <label for="kProjectFilter" class="kfilter-label">Project:</label>
+        <select id="kProjectFilter" class="kfilter-select">
+          <option value="all">All projects</option>
+          <option value="none">No project</option>
+        </select>
+        <button type="button" class="chip" id="kChipOverdue" data-chip="overdue">Overdue</button>
+        <button type="button" class="chip" id="kChipHigh" data-chip="high">High priority</button>
+      </div>
       <p class="kboard-hint">Drag a card between columns to change its status. 🖐️</p>
       <div class="board" id="kanbanBoard"></div>
     </section>
@@ -556,6 +633,7 @@
 --------------------------------------------------------- */
 
 const STORE_KEY = "projectTracker.tasks.v1";
+const PROJECTS_KEY = "projectTracker.projects.v1";   // projects stored separately from tasks
 const THEME_KEY = "projectTracker.theme";   // stores "light" | "dark" (absent = follow system)
 
 // --- Theme (dark mode) ---
@@ -610,6 +688,8 @@ function applyFormOpen() {
 
 // --- State ---
 let tasks = load();
+let projects = loadProjects();
+let projectFilter = "all";   // "all" = every project; otherwise a project id (or "none")
 let currentView = "list";
 let editingId = null;   // null = form is in "add" mode; otherwise the id being edited
 let calCursor = new Date(); calCursor.setDate(1);  // anchor date for the calendar
@@ -640,11 +720,40 @@ function normalizeTask(t) {
     status: ["todo", "doing", "done"].includes(t.status) ? t.status : "todo",
     priority: ["none", "low", "med", "high"].includes(t.priority) ? t.priority : "none",
     notes: typeof t.notes === "string" ? t.notes : "",   // added later — old/imported tasks default to ""
+    projectId: typeof t.projectId === "string" ? t.projectId : "",  // "" = no project
     created: typeof t.created === "number" ? t.created : Date.now(),
+  };
+}
+// Projects are their own objects (one project has many tasks). Same defaults-first
+// pattern as normalizeTask so imported/old project data is filled in safely.
+function normalizeProject(p) {
+  return {
+    id: p && p.id ? p.id : uid(),
+    name: p && typeof p.name === "string" ? p.name : "Untitled project",
+    created: p && typeof p.created === "number" ? p.created : Date.now(),
   };
 }
 function save() {
   localStorage.setItem(STORE_KEY, JSON.stringify(tasks));
+}
+function loadProjects() {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeProject) : [];
+  } catch (e) {
+    console.warn("Could not load projects:", e);
+    return [];
+  }
+}
+function saveProjects() {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+}
+// Look up a project's name by id; "" or unknown id → null (treated as "No project").
+function projectName(id) {
+  if (!id) return null;
+  const p = projects.find(p => p.id === id);
+  return p ? p.name : null;
 }
 
 // --- Helpers ---
@@ -686,7 +795,7 @@ function ymd(year, month, day) {
 }
 
 // --- CRUD ---
-function addTask(title, due, status, priority, notes) {
+function addTask(title, due, status, priority, notes, projectId) {
   tasks.push({
     id: uid(),
     title: title.trim(),
@@ -694,6 +803,7 @@ function addTask(title, due, status, priority, notes) {
     status: status || "todo",
     priority: priority || "none",
     notes: (notes || "").trim(),
+    projectId: projectId || "",
     created: Date.now(),
   });
   save();
@@ -713,6 +823,38 @@ function deleteTask(id) {
   render();
 }
 
+// --- Project CRUD ---
+function addProject(name) {
+  const clean = (name || "").trim();
+  if (!clean) return null;
+  const p = { id: uid(), name: clean, created: Date.now() };
+  projects.push(p);
+  saveProjects();
+  return p;
+}
+function renameProject(id, name) {
+  const p = projects.find(p => p.id === id);
+  const clean = (name || "").trim();
+  if (!p || !clean) return;
+  p.name = clean;
+  saveProjects();
+  render();
+}
+// Deleting a project must NOT orphan its tasks: reassign them to "" (No project).
+// Returns how many tasks were reassigned so the UI can mention it.
+function deleteProject(id) {
+  let reassigned = 0;
+  tasks.forEach(t => {
+    if (t.projectId === id) { t.projectId = ""; reassigned++; }
+  });
+  projects = projects.filter(p => p.id !== id);
+  if (projectFilter === id) projectFilter = "all";   // don't get stuck filtering a deleted project
+  save();
+  saveProjects();
+  render();
+  return reassigned;
+}
+
 // --- Export / Import (data portability) ---
 
 // Export: turn tasks into a JSON file and trigger a browser download.
@@ -722,6 +864,7 @@ function exportTasks() {
     version: 1,
     exportedAt: new Date().toISOString(),
     tasks: tasks,
+    projects: projects,
   };
   const json = JSON.stringify(payload, null, 2);
   // A Blob is an in-memory file; URL.createObjectURL gives it a temporary URL
@@ -737,7 +880,7 @@ function exportTasks() {
   URL.revokeObjectURL(url);
 }
 
-// Parse + validate the text of an imported file. Returns an array of tasks,
+// Parse + validate the text of an imported file. Returns { tasks, projects },
 // or throws an Error with a friendly message if the file isn't usable.
 function parseImport(text) {
   let data;
@@ -752,13 +895,18 @@ function parseImport(text) {
     throw new Error("This doesn't look like a Project Tracker backup.");
   }
   // Keep only objects that have a usable title, and normalize each one.
-  const cleaned = rawTasks
+  const cleanedTasks = rawTasks
     .filter(t => t && typeof t === "object" && typeof t.title === "string" && t.title.trim())
     .map(normalizeTask);
-  if (cleaned.length === 0) {
+  if (cleanedTasks.length === 0) {
     throw new Error("No valid tasks found in that file.");
   }
-  return cleaned;
+  // Projects are optional (older backups won't have them).
+  const rawProjects = (data && Array.isArray(data.projects)) ? data.projects : [];
+  const cleanedProjects = rawProjects
+    .filter(p => p && typeof p === "object" && typeof p.name === "string" && p.name.trim())
+    .map(normalizeProject);
+  return { tasks: cleanedTasks, projects: cleanedProjects };
 }
 
 // Import: read the chosen file, validate, and let the user replace or merge.
@@ -772,26 +920,45 @@ function importTasks(file) {
       alert("Import failed: " + e.message);
       return;
     }
+    const projMsg = incoming.projects.length ? ` and ${incoming.projects.length} project(s)` : "";
     const replace = confirm(
-      `Found ${incoming.length} task(s) in the file.\n\n` +
-      `OK = REPLACE all current tasks with the file.\n` +
-      `Cancel = MERGE the file's tasks into your current list.`
+      `Found ${incoming.tasks.length} task(s)${projMsg} in the file.\n\n` +
+      `OK = REPLACE all current data with the file.\n` +
+      `Cancel = MERGE the file's data into your current list.`
     );
     if (replace) {
-      tasks = incoming;
+      tasks = incoming.tasks;
+      projects = incoming.projects;
     } else {
-      // Merge: avoid duplicate ids by giving incoming tasks fresh ids if they collide
+      // Merge: avoid duplicate ids by giving incoming items fresh ids if they collide.
+      // When a project id is remapped, keep tasks pointing at it by rewriting their projectId.
+      const existingProjIds = new Set(projects.map(p => p.id));
+      const projRemap = {};
+      incoming.projects.forEach(p => {
+        if (existingProjIds.has(p.id)) { const newId = uid(); projRemap[p.id] = newId; p.id = newId; }
+        projects.push(p);
+      });
       const existingIds = new Set(tasks.map(t => t.id));
-      incoming.forEach(t => {
+      incoming.tasks.forEach(t => {
+        if (t.projectId && projRemap[t.projectId]) t.projectId = projRemap[t.projectId];
         if (existingIds.has(t.id)) t.id = uid();
         tasks.push(t);
       });
     }
+    saveProjects();
     save();
     render();
   };
   reader.onerror = () => alert("Could not read that file.");
   reader.readAsText(file);
+}
+
+// Does a task pass the current global project filter?
+// "all" → everything; "none" → tasks with no project; otherwise → that project id.
+function matchesProjectFilter(t) {
+  if (projectFilter === "all") return true;
+  if (projectFilter === "none") return !t.projectId;
+  return t.projectId === projectFilter;
 }
 
 // --- Rendering (List view) ---
@@ -814,7 +981,10 @@ function renderList() {
   if (activeChips.overdue) rows = rows.filter(t => t.due && t.due < today && t.status !== "done");
   if (activeChips.high) rows = rows.filter(t => t.priority === "high");
 
-  const anyFilterActive = filter !== "all" || q || activeChips.overdue || activeChips.high;
+  // Global project filter
+  rows = rows.filter(matchesProjectFilter);
+
+  const anyFilterActive = filter !== "all" || q || activeChips.overdue || activeChips.high || projectFilter !== "all";
 
   rows.sort((a, b) => {
     if (sortBy === "due") {
@@ -843,79 +1013,117 @@ function renderList() {
   }
 
   listEl.innerHTML = "";
+
+  // When viewing All projects, group tasks under project headings so the
+  // one-to-many structure is visible; otherwise render a flat list.
+  if (projectFilter === "all" && projects.length > 0) {
+    const groups = groupByProject(rows);
+    groups.forEach(g => {
+      const heading = document.createElement("div");
+      heading.className = "project-heading";
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = g.name;          // safe text
+      const countSpan = document.createElement("span");
+      countSpan.className = "project-heading-count";
+      countSpan.textContent = `${g.tasks.length}`;
+      heading.append(nameSpan, countSpan);
+      listEl.appendChild(heading);
+      g.tasks.forEach(t => listEl.appendChild(buildTaskItem(t, today)));
+    });
+  } else {
+    rows.forEach(t => listEl.appendChild(buildTaskItem(t, today)));
+  }
+}
+
+// Group a list of tasks by project for the grouped List view. Returns an array
+// of { name, tasks } in a stable order: named projects alphabetically, then
+// "No project" last. Only groups that actually have tasks are returned.
+function groupByProject(rows) {
+  const byId = {};
   rows.forEach(t => {
-    // Wrapper holds the card row + an optional expandable notes panel beneath it,
-    // so the panel can be full-width without disturbing the card's flex layout.
-    const item = document.createElement("div");
-    item.className = "task-item";
-
-    const card = document.createElement("div");
-    card.className = "task " + t.status;
-
-    const overdue = t.due && t.due < today && t.status !== "done";
-    const hasNotes = !!(t.notes && t.notes.trim());
-
-    card.innerHTML = `
-      <input type="checkbox" ${t.status === "done" ? "checked" : ""} aria-label="Mark done" />
-      <div class="body">
-        <div class="title"></div>
-        <div class="meta">
-          <span class="pill ${t.status}">${STATUS_LABEL[t.status]}</span>
-          ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
-          ${hasNotes ? `<button class="notes-toggle" aria-expanded="false" title="Show notes">📝 Notes</button>` : ""}
-        </div>
-      </div>
-      <select aria-label="Change status">
-        <option value="todo">To Do</option>
-        <option value="doing">In Progress</option>
-        <option value="done">Done</option>
-      </select>
-      <button class="edit" aria-label="Edit task" title="Edit">✏️</button>
-      <button class="del" aria-label="Delete task" title="Delete">✕</button>
-    `;
-
-    // Safe text insertion (avoids HTML injection from task titles)
-    card.querySelector(".title").textContent = t.title;
-    card.querySelector("select").value = t.status;
-
-    // Priority badge (prepended to the meta row)
-    const pBadge = priorityBadge(t.priority);
-    if (pBadge) card.querySelector(".meta").insertBefore(pBadge, card.querySelector(".meta").firstChild);
-
-    // Wire events
-    card.querySelector('input[type="checkbox"]').addEventListener("change", e => {
-      updateTask(t.id, { status: e.target.checked ? "done" : "todo" });
-    });
-    card.querySelector("select").addEventListener("change", e => {
-      updateTask(t.id, { status: e.target.value });
-    });
-    card.querySelector(".edit").addEventListener("click", () => {
-      startEdit(t.id);
-    });
-    card.querySelector(".del").addEventListener("click", () => {
-      if (confirm("Delete this task?")) deleteTask(t.id);
-    });
-
-    item.appendChild(card);
-
-    // Notes: collapsed panel toggled by the 📝 button. Notes are inserted as
-    // textContent (never innerHTML) so a note can't inject markup. white-space
-    // in CSS preserves the user's line breaks.
-    if (hasNotes) {
-      const panel = document.createElement("div");
-      panel.className = "notes-panel";
-      panel.textContent = t.notes;
-      item.appendChild(panel);
-
-      const toggle = card.querySelector(".notes-toggle");
-      toggle.addEventListener("click", () => {
-        const open = item.classList.toggle("notes-open");
-        toggle.setAttribute("aria-expanded", String(open));
-      });
-    }
-
-    listEl.appendChild(item);
+    const key = t.projectId || "";
+    (byId[key] = byId[key] || []).push(t);
   });
+  const out = [];
+  projects.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    if (byId[p.id] && byId[p.id].length) out.push({ name: p.name, tasks: byId[p.id] });
+  });
+  if (byId[""] && byId[""].length) out.push({ name: "No project", tasks: byId[""] });
+  return out;
+}
+
+// Build one task's list item (card row + optional notes panel). Extracted so
+// both the flat and grouped renderers share identical card markup + wiring.
+function buildTaskItem(t, today) {
+  const item = document.createElement("div");
+  item.className = "task-item";
+
+  const card = document.createElement("div");
+  card.className = "task " + t.status;
+
+  const overdue = t.due && t.due < today && t.status !== "done";
+  const hasNotes = !!(t.notes && t.notes.trim());
+
+  card.innerHTML = `
+    <input type="checkbox" ${t.status === "done" ? "checked" : ""} aria-label="Mark done" />
+    <div class="body">
+      <div class="title"></div>
+      <div class="meta">
+        <span class="pill ${t.status}">${STATUS_LABEL[t.status]}</span>
+        ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
+        ${hasNotes ? `<button class="notes-toggle" aria-expanded="false" title="Show notes">📝 Notes</button>` : ""}
+      </div>
+    </div>
+    <select aria-label="Change status">
+      <option value="todo">To Do</option>
+      <option value="doing">In Progress</option>
+      <option value="done">Done</option>
+    </select>
+    <button class="edit" aria-label="Edit task" title="Edit">✏️</button>
+    <button class="del" aria-label="Delete task" title="Delete">✕</button>
+  `;
+
+  // Safe text insertion (avoids HTML injection from task titles)
+  card.querySelector(".title").textContent = t.title;
+  card.querySelector("select").value = t.status;
+
+  // Priority badge (prepended to the meta row)
+  const pBadge = priorityBadge(t.priority);
+  if (pBadge) card.querySelector(".meta").insertBefore(pBadge, card.querySelector(".meta").firstChild);
+
+  // Wire events
+  card.querySelector('input[type="checkbox"]').addEventListener("change", e => {
+    updateTask(t.id, { status: e.target.checked ? "done" : "todo" });
+  });
+  card.querySelector("select").addEventListener("change", e => {
+    updateTask(t.id, { status: e.target.value });
+  });
+  card.querySelector(".edit").addEventListener("click", () => {
+    startEdit(t.id);
+  });
+  card.querySelector(".del").addEventListener("click", () => {
+    if (confirm("Delete this task?")) deleteTask(t.id);
+  });
+
+  item.appendChild(card);
+
+  // Notes: collapsed panel toggled by the 📝 button. Notes are inserted as
+  // textContent (never innerHTML) so a note can't inject markup. white-space
+  // in CSS preserves the user's line breaks.
+  if (hasNotes) {
+    const panel = document.createElement("div");
+    panel.className = "notes-panel";
+    panel.textContent = t.notes;
+    item.appendChild(panel);
+
+    const toggle = card.querySelector(".notes-toggle");
+    toggle.addEventListener("click", () => {
+      const open = item.classList.toggle("notes-open");
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  return item;
 }
 
 // --- Rendering (Kanban view) ---
@@ -933,6 +1141,10 @@ function renderKanban() {
   COLUMNS.forEach(col => {
     const colTasks = tasks
       .filter(t => t.status === col.status)
+      .filter(matchesProjectFilter)
+      // Same quick-filter chips as List (shared activeChips state)
+      .filter(t => !activeChips.overdue || (t.due && t.due < today && t.status !== "done"))
+      .filter(t => !activeChips.high || t.priority === "high")
       .sort((a, b) => b.created - a.created);
 
     const column = document.createElement("div");
@@ -1033,6 +1245,7 @@ function tasksByDate() {
   const byDate = {};
   tasks.forEach(t => {
     if (!t.due) return;
+    if (!matchesProjectFilter(t)) return;   // respect the global project filter
     (byDate[t.due] = byDate[t.due] || []).push(t);
   });
   return byDate;
@@ -1199,6 +1412,98 @@ function renderDay() {
   grid.appendChild(cell);
 }
 
+// --- Projects management panel ---
+function taskCountForProject(id) {
+  return tasks.filter(t => t.projectId === id).length;
+}
+function renderProjectsPanel() {
+  const listEl = document.getElementById("projectList");
+  listEl.innerHTML = "";
+  if (projects.length === 0) {
+    const li = document.createElement("li");
+    li.className = "pp-empty";
+    li.textContent = "No projects yet. Add one above to start grouping tasks.";
+    listEl.appendChild(li);
+    return;
+  }
+  projects.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    const li = document.createElement("li");
+    li.className = "pp-item";
+
+    const name = document.createElement("span");
+    name.className = "pp-name";
+    name.textContent = p.name;          // safe text (no HTML injection from names)
+
+    const count = document.createElement("span");
+    count.className = "pp-count";
+    const n = taskCountForProject(p.id);
+    count.textContent = `${n} task${n === 1 ? "" : "s"}`;
+
+    const rename = document.createElement("button");
+    rename.className = "pp-rename";
+    rename.type = "button";
+    rename.textContent = "Rename";
+    rename.addEventListener("click", () => {
+      const next = prompt("Rename project:", p.name);
+      if (next !== null) renameProject(p.id, next);   // null = cancelled
+    });
+
+    const del = document.createElement("button");
+    del.className = "pp-delete";
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      const n = taskCountForProject(p.id);
+      const warn = n > 0
+        ? `Delete "${p.name}"? Its ${n} task${n === 1 ? "" : "s"} will be kept but moved to "No project".`
+        : `Delete "${p.name}"?`;
+      if (confirm(warn)) deleteProject(p.id);
+    });
+
+    li.append(name, count, rename, del);
+    listEl.appendChild(li);
+  });
+}
+
+// Build the form's project <select> (No project + each project), keeping the
+// current selection if it still exists.
+function renderProjectFormOptions() {
+  const sel = document.getElementById("projectInput");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">No project</option>';
+  projects.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  // Restore selection only if that project still exists
+  sel.value = projects.some(p => p.id === current) ? current : "";
+}
+
+// Build the global project filter <select>s (All projects + No project + each).
+// Both the List and Kanban pickers are kept identical and in sync here.
+function renderProjectFilterOptions() {
+  // Validate the active filter once, up front
+  const valid = ["all", "none"].includes(projectFilter) || projects.some(p => p.id === projectFilter);
+  if (!valid) projectFilter = "all";
+
+  const sorted = projects.slice().sort((a, b) => a.name.localeCompare(b.name));
+  ["projectFilter", "kProjectFilter"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="all">All projects</option><option value="none">No project</option>';
+    sorted.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+    sel.value = projectFilter;   // keep both dropdowns showing the shared filter
+  });
+}
+
 // --- View router (extend here for future views) ---
 const VIEWS = {
   list: renderList,
@@ -1207,11 +1512,28 @@ const VIEWS = {
   // gantt: renderGantt,
 };
 function render() {
+  // Keep all project-aware controls in sync with the current projects list
+  syncProjectControls();
+  syncChipControls();
   // Show only the active view's section
   document.getElementById("view-list").style.display = currentView === "list" ? "" : "none";
   document.getElementById("view-kanban").style.display = currentView === "kanban" ? "" : "none";
   document.getElementById("view-calendar").style.display = currentView === "calendar" ? "" : "none";
   (VIEWS[currentView] || renderList)();
+}
+// Rebuild every control that lists projects: the management panel, the
+// form's project dropdown, and both global filter dropdowns.
+function syncProjectControls() {
+  renderProjectsPanel();
+  renderProjectFormOptions();
+  renderProjectFilterOptions();
+}
+// Reflect the shared activeChips state onto both the List and Kanban chips,
+// so toggling a chip in one view shows as active in the other.
+function syncChipControls() {
+  document.querySelectorAll(".chip[data-chip]").forEach(chip => {
+    chip.classList.toggle("active", !!activeChips[chip.dataset.chip]);
+  });
 }
 
 // --- Edit mode (the "one form, two modes" pattern) ---
@@ -1224,6 +1546,8 @@ function startEdit(id) {
   document.getElementById("dueInput").value = t.due;
   document.getElementById("statusInput").value = t.status;
   document.getElementById("priorityInput").value = t.priority || "none";
+  renderProjectFormOptions();   // make sure the dropdown is current before selecting
+  document.getElementById("projectInput").value = t.projectId || "";
   document.getElementById("notesInput").value = t.notes || "";
   // Flip the UI into edit mode
   document.getElementById("submitBtn").textContent = "Save";
@@ -1252,16 +1576,17 @@ document.getElementById("addForm").addEventListener("submit", e => {
   const due = document.getElementById("dueInput").value;
   const status = document.getElementById("statusInput").value;
   const priority = document.getElementById("priorityInput").value;
+  const projectId = document.getElementById("projectInput").value;
   const notes = document.getElementById("notesInput").value;
   if (!title.trim()) return;
 
   if (editingId) {
     // Edit mode: update the existing task
-    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, notes: notes.trim() });
+    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, projectId, notes: notes.trim() });
     cancelEdit();
   } else {
     // Add mode: create a new task
-    addTask(title, due, status, priority, notes);
+    addTask(title, due, status, priority, notes, projectId);
     e.target.reset();
     formOpen = false;          // collapse on mobile so the new task is visible
     applyFormOpen();
@@ -1296,6 +1621,16 @@ document.getElementById("calModes").addEventListener("click", e => {
 
 document.getElementById("filterStatus").addEventListener("change", render);
 document.getElementById("sortBy").addEventListener("change", render);
+// Global project filter — applies to every view
+document.getElementById("projectFilter").addEventListener("change", e => {
+  projectFilter = e.target.value;
+  render();
+});
+// Kanban's project picker drives the same shared filter
+document.getElementById("kProjectFilter").addEventListener("change", e => {
+  projectFilter = e.target.value;
+  render();
+});
 
 // Live search — re-render on each keystroke
 document.getElementById("searchInput").addEventListener("input", e => {
@@ -1322,6 +1657,29 @@ document.getElementById("addToggle").addEventListener("click", () => {
   if (formOpen) document.getElementById("titleInput").focus();
 });
 applyFormOpen();  // set initial state on load
+
+// Projects panel open/close + add
+document.getElementById("projectsBtn").addEventListener("click", () => {
+  const panel = document.getElementById("projectsPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) {
+    renderProjectsPanel();
+    document.getElementById("projectNameInput").focus();
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+});
+document.getElementById("projectsClose").addEventListener("click", () => {
+  document.getElementById("projectsPanel").hidden = true;
+});
+document.getElementById("projectAddForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("projectNameInput");
+  if (addProject(input.value)) {
+    input.value = "";
+    render();            // refresh panel + all project dropdowns
+    input.focus();
+  }
+});
 
 // Dark mode toggle
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);
