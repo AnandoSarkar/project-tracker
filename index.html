@@ -105,6 +105,22 @@
   .controls select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; }
   .count { margin-left: auto; font-size: 13px; color: var(--muted); }
 
+  /* Search box + quick-filter chips */
+  .search-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .search-box {
+    flex: 1; min-width: 200px;
+    padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; font-family: inherit;
+  }
+  .search-box:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .chip {
+    padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--muted); font-size: 13px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { background: var(--bg); }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
   /* Task cards */
   .task-list { display: flex; flex-direction: column; gap: 8px; }
   .task {
@@ -331,6 +347,11 @@
 
     <!-- LIST VIEW -->
     <section id="view-list">
+      <div class="search-row">
+        <input type="search" id="searchInput" class="search-box" placeholder="🔎 Search tasks…" aria-label="Search tasks" />
+        <button type="button" class="chip" id="chipOverdue" data-chip="overdue">Overdue</button>
+        <button type="button" class="chip" id="chipHigh" data-chip="high">High priority</button>
+      </div>
       <div class="controls">
         <label for="filterStatus">Filter:</label>
         <select id="filterStatus">
@@ -398,6 +419,8 @@ let currentView = "list";
 let editingId = null;   // null = form is in "add" mode; otherwise the id being edited
 let calCursor = new Date(); calCursor.setDate(1);  // anchor date for the calendar
 let calMode = "month";                              // "month" | "week" | "day"
+let searchText = "";                                // live search query (list view)
+let activeChips = { overdue: false, high: false };  // quick-filter toggles
 
 // --- Persistence ---
 function load() {
@@ -487,8 +510,21 @@ function renderList() {
   const filter = document.getElementById("filterStatus").value;
   const sortBy = document.getElementById("sortBy").value;
 
+  const today = todayStr();
   let rows = tasks.slice();
+
+  // Status dropdown
   if (filter !== "all") rows = rows.filter(t => t.status === filter);
+
+  // Live search — case-insensitive match on title
+  const q = searchText.trim().toLowerCase();
+  if (q) rows = rows.filter(t => t.title.toLowerCase().includes(q));
+
+  // Quick-filter chips (each narrows further; combining = AND)
+  if (activeChips.overdue) rows = rows.filter(t => t.due && t.due < today && t.status !== "done");
+  if (activeChips.high) rows = rows.filter(t => t.priority === "high");
+
+  const anyFilterActive = filter !== "all" || q || activeChips.overdue || activeChips.high;
 
   rows.sort((a, b) => {
     if (sortBy === "due") {
@@ -504,15 +540,18 @@ function renderList() {
     return b.created - a.created; // newest first
   });
 
-  document.getElementById("count").textContent =
-    tasks.length + (tasks.length === 1 ? " task" : " tasks");
+  // Count reflects "showing X of Y" when filters are active
+  document.getElementById("count").textContent = anyFilterActive
+    ? `${rows.length} of ${tasks.length} shown`
+    : `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`;
 
   if (rows.length === 0) {
-    listEl.innerHTML = '<div class="empty">No tasks here yet. Add one above to get started! 🚀</div>';
+    listEl.innerHTML = anyFilterActive
+      ? '<div class="empty">No tasks match your search or filters. Try clearing them. 🔍</div>'
+      : '<div class="empty">No tasks here yet. Add one above to get started! 🚀</div>';
     return;
   }
 
-  const today = todayStr();
   listEl.innerHTML = "";
   rows.forEach(t => {
     const card = document.createElement("div");
@@ -936,6 +975,22 @@ document.getElementById("calModes").addEventListener("click", e => {
 
 document.getElementById("filterStatus").addEventListener("change", render);
 document.getElementById("sortBy").addEventListener("change", render);
+
+// Live search — re-render on each keystroke
+document.getElementById("searchInput").addEventListener("input", e => {
+  searchText = e.target.value;
+  render();
+});
+
+// Quick-filter chips — toggle active state then re-render
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    const key = chip.dataset.chip;
+    activeChips[key] = !activeChips[key];
+    chip.classList.toggle("active", activeChips[key]);
+    render();
+  });
+});
 
 document.getElementById("tabs").addEventListener("click", e => {
   const btn = e.target.closest(".tab");
