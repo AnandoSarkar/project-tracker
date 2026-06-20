@@ -134,6 +134,12 @@ const ROADMAP = {
         learn: "One view, multiple modes via shared helpers",
         ship: "Shipped",
         d: "Done ✅ — a segmented toggle switches the calendar between Month, Week, and Day; prev/next/today step by the active unit and the title reformats to match. You learned to factor shared building blocks (group-by-date, build a chip, build a day cell) and a calMode dispatcher instead of three copy-pasted renderers — plus weekStart() math that rolls cleanly across month/year boundaries."
+      },
+      {
+        t: "Task priority + colour tags",
+        learn: "Extending your data model safely",
+        ship: "Shipped",
+        d: "Done ✅ — a priority selector (None/Low/Med/High) on the form, coloured badges in list & kanban and a coloured dot on calendar chips, plus a High→Low sort. The key lesson: a backward-compatible migration in load() defaults older saved tasks to 'none' so existing browser data keeps working — real-world data versioning."
       }
     ]
   },
@@ -142,10 +148,10 @@ const ROADMAP = {
     note: "next steps",
     items: [
       {
-        t: "Task priority + colour tags",
-        learn: "Extending your data model safely",
+        t: "Search & quick filters",
+        learn: "Live filtering UX",
         effort: "Small",
-        d: "Add a priority field (Low/Med/High) and show it as a coloured badge. Teaches you how to add a new property to existing saved data without breaking older tasks — a real-world versioning lesson."
+        d: "A search box that filters tasks as you type, plus quick chips like 'Due today' / 'Overdue'. Teaches debouncing input and composing multiple filters cleanly."
       }
     ]
   },
@@ -153,12 +159,6 @@ const ROADMAP = {
     title: "Next",
     note: "once basics feel solid",
     items: [
-      {
-        t: "Search & quick filters",
-        learn: "Live filtering UX",
-        effort: "Small",
-        d: "A search box that filters tasks as you type, plus quick chips like 'Due today' / 'Overdue'. Teaches debouncing input and composing multiple filters cleanly."
-      },
       {
         t: "Export / import (JSON)",
         learn: "File download & upload in the browser",
