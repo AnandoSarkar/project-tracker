@@ -225,19 +225,30 @@
   .cal-modes button:not(.active):hover { background: var(--bg); }
 
   .calendar { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
-  .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-  .cal-weekdays { background: #ebecf0; }
-  .cal-weekdays div {
-    padding: 8px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted); font-weight: 600; text-align: center; border-right: 1px solid var(--line);
+  /* Gridlines are drawn by a 1px column gap over a line-coloured background — uniform, no missing
+     borders. The header row uses the SAME column-gap so its columns line up exactly with the grid. */
+  .cal-weekdays {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    column-gap: 1px; background: #ebecf0;
   }
-  .cal-weekdays div:last-child { border-right: none; }
+  .cal-weekdays div {
+    padding: 9px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); font-weight: 700; text-align: center; background: #ebecf0;
+  }
+  .cal-weekdays div.weekend { color: var(--accent); background: #e3e8ef; }
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 1px; background: var(--line);            /* the gap shows this colour = gridlines */
+    border-top: 1px solid var(--line);
+  }
   .cal-cell {
-    min-height: 92px; border-right: 1px solid var(--line); border-top: 1px solid var(--line);
-    padding: 4px 5px; cursor: pointer; position: relative; transition: background .1s ease;
+    min-height: 96px; min-width: 0; background: var(--card);   /* min-width:0 lets the cell shrink so content can't widen the column */
+    padding: 5px 6px; cursor: pointer; position: relative; transition: background .1s ease;
+    overflow: hidden;
   }
   .cal-cell:hover { background: var(--accent-soft); }
-  .cal-cell:nth-child(7n) { border-right: none; }
+  .cal-cell.weekend { background: #f7f8fa; }
+  .cal-cell.weekend:hover { background: var(--accent-soft); }
   .cal-cell.blank { background: #fafbfc; cursor: default; }
   .cal-cell.blank:hover { background: #fafbfc; }
   .cal-cell.today { background: #fff8e6; }
@@ -248,6 +259,7 @@
     width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
   }
   .cal-task {
+    display: block; max-width: 100%; box-sizing: border-box;
     font-size: 11px; line-height: 1.3; margin-top: 3px; padding: 2px 5px; border-radius: 4px;
     background: var(--accent-soft); color: var(--ink);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -265,8 +277,8 @@
   .cal-cell.today .cal-wd-num { color: var(--accent); }
 
   /* Day view: single column, generous spacing */
-  .calendar.day-mode .cal-weekdays { grid-template-columns: 1fr; }
-  .calendar.day-mode .cal-grid { grid-template-columns: 1fr; }
+  .calendar.day-mode .cal-weekdays { grid-template-columns: minmax(0, 1fr); }
+  .calendar.day-mode .cal-grid { grid-template-columns: minmax(0, 1fr); }
   .calendar.day-mode .cal-cell { min-height: 360px; border-right: none; }
   .calendar.day-mode .cal-task { white-space: normal; font-size: 13px; padding: 6px 9px; margin-top: 6px; }
   .day-empty { color: var(--muted); font-size: 13px; padding: 18px 6px; }
@@ -648,7 +660,19 @@ function renderKanban() {
 const MONTH_NAMES = ["January","February","March","April","May","June",
   "July","August","September","October","November","December"];
 
-const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+// Week starts Monday. Headers are ordered Mon→Sun to match.
+const WEEKDAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+// JS getDay() is Sunday-based (0=Sun…6=Sat). Convert to a Monday-based
+// index (0=Mon…6=Sun) so all our column math lines up with a Mon-start week.
+function mondayIndex(date) {
+  return (date.getDay() + 6) % 7;   // Sun(0)->6, Mon(1)->0, … Sat(6)->5
+}
+// A date is on the weekend if it's Saturday or Sunday.
+function isWeekend(date) {
+  const d = date.getDay();
+  return d === 0 || d === 6;        // 0=Sun, 6=Sat
+}
 
 // Group all dated tasks by their due date — used by every calendar mode.
 function tasksByDate() {
@@ -679,9 +703,10 @@ function taskChip(t, dateStr, today) {
 }
 
 // Make one day cell. `cap` limits visible chips (month view); null = show all.
-function dayCell(dateStr, dayNum, byDate, today, cap) {
+// `weekend` adds the shaded weekend style.
+function dayCell(dateStr, dayNum, byDate, today, cap, weekend) {
   const cell = document.createElement("div");
-  cell.className = "cal-cell" + (dateStr === today ? " today" : "");
+  cell.className = "cal-cell" + (dateStr === today ? " today" : "") + (weekend ? " weekend" : "");
   if (dayNum != null) cell.innerHTML = `<div class="cal-daynum">${dayNum}</div>`;
 
   const dayTasks = byDate[dateStr] || [];
@@ -704,21 +729,29 @@ function dayCell(dateStr, dayNum, byDate, today, cap) {
   return cell;
 }
 
-// Set the weekday header row contents (month/week use 7 cols, day uses 1).
+// Set the weekday header row. Each entry is { html, weekend } (weekend optional).
 function setWeekdayHeader(cells) {
   const wd = document.getElementById("calWeekdays");
   wd.innerHTML = "";
-  cells.forEach(html => {
+  cells.forEach(entry => {
     const d = document.createElement("div");
-    d.innerHTML = html;
+    if (typeof entry === "string") {
+      d.innerHTML = entry;
+    } else {
+      d.innerHTML = entry.html;
+      if (entry.weekend) d.classList.add("weekend");
+    }
     wd.appendChild(d);
   });
 }
 
-// Sunday that starts the week containing `date`.
+// In our Monday-first WEEKDAY_NAMES, Sat is index 5 and Sun is index 6.
+function isWeekendCol(i) { return i === 5 || i === 6; }
+
+// Monday that starts the week containing `date`.
 function weekStart(date) {
   const d = new Date(date);
-  d.setDate(d.getDate() - d.getDay());   // getDay(): 0=Sun … 6=Sat
+  d.setDate(d.getDate() - mondayIndex(d));   // step back to this week's Monday
   d.setHours(0, 0, 0, 0);
   return d;
 }
@@ -738,21 +771,23 @@ function renderMonth() {
   const year = calCursor.getFullYear();
   const month = calCursor.getMonth();
   document.getElementById("calTitle").textContent = `${MONTH_NAMES[month]} ${year}`;
-  setWeekdayHeader(WEEKDAY_NAMES);
+  setWeekdayHeader(WEEKDAY_NAMES.map((name, i) => ({ html: name, weekend: isWeekendCol(i) })));
 
-  const firstWeekday = new Date(year, month, 1).getDay();
+  // Monday-based: how many blank cells before the 1st (Mon=0 leading blanks … Sun=6)
+  const firstBlank = mondayIndex(new Date(year, month, 1));
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const byDate = tasksByDate();
   const today = todayStr();
   grid.innerHTML = "";
 
-  for (let i = 0; i < firstWeekday; i++) {
+  for (let i = 0; i < firstBlank; i++) {
     const blank = document.createElement("div");
-    blank.className = "cal-cell blank";
+    blank.className = "cal-cell blank" + (isWeekendCol(i) ? " weekend" : "");
     grid.appendChild(blank);
   }
   for (let day = 1; day <= daysInMonth; day++) {
-    grid.appendChild(dayCell(ymd(year, month, day), day, byDate, today, 3));
+    const date = new Date(year, month, day);
+    grid.appendChild(dayCell(ymd(year, month, day), day, byDate, today, 3, isWeekend(date)));
   }
 }
 
@@ -775,13 +810,16 @@ function renderWeek() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     days.push(d);
-    headers.push(`${WEEKDAY_NAMES[i]}<span class="cal-wd-num">${d.getDate()}</span>`);
+    headers.push({
+      html: `${WEEKDAY_NAMES[i]}<span class="cal-wd-num">${d.getDate()}</span>`,
+      weekend: isWeekendCol(i),
+    });
   }
   setWeekdayHeader(headers);
 
   grid.innerHTML = "";
   days.forEach(d => {
-    grid.appendChild(dayCell(ymd(d.getFullYear(), d.getMonth(), d.getDate()), null, byDate, today, null));
+    grid.appendChild(dayCell(ymd(d.getFullYear(), d.getMonth(), d.getDate()), null, byDate, today, null, isWeekend(d)));
   });
 }
 
@@ -789,14 +827,15 @@ function renderDay() {
   const grid = document.getElementById("calGrid");
   const d = new Date(calCursor);
   const dateStr = ymd(d.getFullYear(), d.getMonth(), d.getDate());
+  const wdName = WEEKDAY_NAMES[mondayIndex(d)];   // mondayIndex keeps name correct for Sun
   document.getElementById("calTitle").textContent =
-    `${WEEKDAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`;
-  setWeekdayHeader([`${WEEKDAY_NAMES[d.getDay()]} — full day`]);
+    `${wdName}, ${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`;
+  setWeekdayHeader([{ html: `${wdName} — full day`, weekend: isWeekend(d) }]);
 
   const byDate = tasksByDate();
   const today = todayStr();
   grid.innerHTML = "";
-  const cell = dayCell(dateStr, null, byDate, today, null);
+  const cell = dayCell(dateStr, null, byDate, today, null, isWeekend(d));
   if (!(byDate[dateStr] || []).length) {
     const empty = document.createElement("div");
     empty.className = "day-empty";
