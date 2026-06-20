@@ -33,6 +33,16 @@
   }
   header h1 { margin: 0; font-size: 20px; }
   header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .header-main { max-width: 820px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-ghost {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
+  }
+  .btn-ghost:hover { background: var(--bg); border-color: var(--accent); color: var(--accent); }
+  @media (max-width: 560px) {
+    .header-main { flex-direction: column; }
+  }
   .wrap { max-width: 820px; margin: 0 auto; padding: 24px; }
 
   /* View tabs (wired up for future Kanban / Calendar / Gantt) */
@@ -310,8 +320,18 @@
 </head>
 <body>
   <header>
-    <h1>📋 Project Tracker</h1>
-    <p>A simple task tracker that saves to your browser. No login, no server.</p>
+    <div class="header-main">
+      <div>
+        <h1>📋 Project Tracker</h1>
+        <p>A simple task tracker that saves to your browser. No login, no server.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">⬇ Export</button>
+        <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">⬆ Import</button>
+        <!-- Hidden file input that the Import button triggers -->
+        <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
+      </div>
+    </div>
   </header>
 
   <div class="wrap">
@@ -427,13 +447,24 @@ function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    // Backward-compatible migration: tasks saved before "priority" existed
-    // won't have the field. Default them to "none" so older data keeps working.
-    return parsed.map(t => ({ priority: "none", ...t }));
+    return parsed.map(normalizeTask);
   } catch (e) {
     console.warn("Could not load tasks:", e);
     return [];
   }
+}
+// Normalize a task object so older/imported data has every field we expect.
+// Defaults are set first, then the source spreads over them — so existing
+// values win and only missing fields get filled in (backward-compatible).
+function normalizeTask(t) {
+  return {
+    id: t.id || uid(),
+    title: typeof t.title === "string" ? t.title : "",
+    due: t.due || "",
+    status: ["todo", "doing", "done"].includes(t.status) ? t.status : "todo",
+    priority: ["none", "low", "med", "high"].includes(t.priority) ? t.priority : "none",
+    created: typeof t.created === "number" ? t.created : Date.now(),
+  };
 }
 function save() {
   localStorage.setItem(STORE_KEY, JSON.stringify(tasks));
@@ -502,6 +533,87 @@ function deleteTask(id) {
   if (editingId === id) cancelEdit();  // bail out of edit mode if we deleted the task being edited
   save();
   render();
+}
+
+// --- Export / Import (data portability) ---
+
+// Export: turn tasks into a JSON file and trigger a browser download.
+function exportTasks() {
+  const payload = {
+    app: "project-tracker",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tasks: tasks,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  // A Blob is an in-memory file; URL.createObjectURL gives it a temporary URL
+  // we can point a download link at, then revoke to free the memory.
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `project-tracker-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Parse + validate the text of an imported file. Returns an array of tasks,
+// or throws an Error with a friendly message if the file isn't usable.
+function parseImport(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error("That file isn't valid JSON.");
+  }
+  // Accept either our export shape { tasks: [...] } or a bare array of tasks.
+  const rawTasks = Array.isArray(data) ? data : data && data.tasks;
+  if (!Array.isArray(rawTasks)) {
+    throw new Error("This doesn't look like a Project Tracker backup.");
+  }
+  // Keep only objects that have a usable title, and normalize each one.
+  const cleaned = rawTasks
+    .filter(t => t && typeof t === "object" && typeof t.title === "string" && t.title.trim())
+    .map(normalizeTask);
+  if (cleaned.length === 0) {
+    throw new Error("No valid tasks found in that file.");
+  }
+  return cleaned;
+}
+
+// Import: read the chosen file, validate, and let the user replace or merge.
+function importTasks(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let incoming;
+    try {
+      incoming = parseImport(reader.result);
+    } catch (e) {
+      alert("Import failed: " + e.message);
+      return;
+    }
+    const replace = confirm(
+      `Found ${incoming.length} task(s) in the file.\n\n` +
+      `OK = REPLACE all current tasks with the file.\n` +
+      `Cancel = MERGE the file's tasks into your current list.`
+    );
+    if (replace) {
+      tasks = incoming;
+    } else {
+      // Merge: avoid duplicate ids by giving incoming tasks fresh ids if they collide
+      const existingIds = new Set(tasks.map(t => t.id));
+      incoming.forEach(t => {
+        if (existingIds.has(t.id)) t.id = uid();
+        tasks.push(t);
+      });
+    }
+    save();
+    render();
+  };
+  reader.onerror = () => alert("Could not read that file.");
+  reader.readAsText(file);
 }
 
 // --- Rendering (List view) ---
@@ -992,6 +1104,17 @@ document.querySelectorAll(".chip").forEach(chip => {
   });
 });
 
+// Export / Import
+document.getElementById("exportBtn").addEventListener("click", exportTasks);
+document.getElementById("importBtn").addEventListener("click", () => {
+  document.getElementById("importFile").click();   // the button proxies to the hidden file input
+});
+document.getElementById("importFile").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (file) importTasks(file);
+  e.target.value = "";   // reset so re-selecting the same file still fires "change"
+});
+
 document.getElementById("tabs").addEventListener("click", e => {
   const btn = e.target.closest(".tab");
   if (!btn || btn.disabled) return;
@@ -1005,8 +1128,8 @@ document.getElementById("tabs").addEventListener("click", e => {
 if (tasks.length === 0 && !localStorage.getItem(STORE_KEY)) {
   const t = todayStr();
   tasks = [
-    { id: uid(), title: "Welcome! Edit or delete me 👋", due: t, status: "todo", created: Date.now() },
-    { id: uid(), title: "Try marking a task as done", due: "", status: "doing", created: Date.now() - 1 },
+    { id: uid(), title: "Welcome! Edit or delete me 👋", due: t, status: "todo", priority: "none", created: Date.now() },
+    { id: uid(), title: "Try marking a task as done", due: "", status: "doing", priority: "low", created: Date.now() - 1 },
   ];
   save();
 }
