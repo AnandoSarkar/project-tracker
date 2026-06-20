@@ -175,6 +175,12 @@ const ROADMAP = {
         learn: "Mobile-first responsive design",
         ship: "Shipped",
         d: "Done ✅ — the phone layout was cramped: the whole screen filled with chrome before a single task appeared. A design critique (see MOBILE-REDESIGN.md) drove a prioritised fix list, all shipped under the mobile breakpoint: the add-task form now collapses behind a '+ Add task' button so the task list comes first; task titles get their own full-width row instead of wrapping into a sliver; the view tabs scroll sideways; filter/sort and section spacing are tightened; and the checkbox is a bigger tap target. Verified live on both mobile and desktop. The gotcha worth remembering: the service worker kept serving the old cached page until the cache name was bumped (v1 → v2) — always bump it when shipping app changes."
+      },
+      {
+        t: "Task notes / descriptions",
+        learn: "Richer fields + detail views",
+        ship: "Shipped",
+        d: "Done ✅ — each task can now hold a free-text notes field. In List view a task with notes shows a 📝 toggle that expands an inline detail panel beneath the card, keeping the card compact (the 'summary vs. detail' pattern). Lessons: extending the data model with another backward-compatible normalizeTask() migration (old tasks default to notes:''), reusing the shared add/edit form (now with a textarea), and rendering multi-line text safely — inserted via textContent (never innerHTML) with white-space:pre-wrap to preserve line breaks. Verified with Node (migration + save/load round-trip) and live."
       }
     ]
   },
@@ -210,12 +216,6 @@ const ROADMAP = {
         learn: "A one-to-many data relationship",
         effort: "Medium",
         d: "Organize tasks under multiple projects, with a project picker to filter each view. Teaches modelling a parent/child relationship (a project has many tasks) and adding a 'projectId' to your task shape — another safe, backward-compatible migration."
-      },
-      {
-        t: "Task notes / descriptions",
-        learn: "Richer fields + detail views",
-        effort: "Small",
-        d: "A longer free-text notes field on each task, shown in an expanded detail panel. Teaches handling multi-line text safely and designing a 'summary vs. detail' UI — the card stays compact, the notes live behind a click."
       },
       {
         t: "Subtasks / checklists",

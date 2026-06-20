@@ -119,6 +119,14 @@
     font-family: inherit;
   }
   .add-form input:focus, .add-form select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  /* Notes textarea spans the full form width on its own row */
+  .notes-input {
+    grid-column: 1 / -1;
+    padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; font-family: inherit; resize: vertical; min-height: 38px;
+    background: var(--card); color: var(--ink);
+  }
+  .notes-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   .btn {
     background: var(--accent);
     color: #fff;
@@ -220,7 +228,7 @@
 
   /* Add-form switches to "edit mode" while editing a task */
   .add-form.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-  .form-actions { display: flex; gap: 8px; }
+  .form-actions { display: flex; gap: 8px; grid-column: 1 / -1; }
   .btn-secondary {
     background: var(--card); color: var(--muted);
     border: 1px solid var(--line); border-radius: 6px;
@@ -235,6 +243,24 @@
   .editing-banner.show { display: block; }
 
   .empty { text-align: center; color: var(--muted); padding: 50px 20px; border: 2px dashed var(--line); border-radius: 8px; }
+
+  /* Task notes: a 📝 toggle in the meta row + a collapsed detail panel.
+     The wrapper lets the panel sit full-width below the card (summary vs. detail). */
+  .task-item { display: flex; flex-direction: column; }
+  .notes-toggle {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font-size: 12px; font-weight: 600; color: var(--accent); font-family: inherit;
+  }
+  .notes-toggle:hover { text-decoration: underline; }
+  .notes-panel {
+    display: none;
+    background: var(--card); border: 1px solid var(--line); border-top: none;
+    border-radius: 0 0 8px 8px;
+    margin: -2px 0 0 4px;            /* tuck under the card, aligned past the status stripe */
+    padding: 10px 14px;
+    font-size: 13px; color: var(--ink); white-space: pre-wrap; word-break: break-word;
+  }
+  .task-item.notes-open .notes-panel { display: block; }
 
   /* Mobile task card: title gets its own full-width row so it stops wrapping into
      a narrow column, and the controls (status / edit / delete) drop to a second
@@ -455,6 +481,7 @@
         <option value="med">Medium</option>
         <option value="high">High</option>
       </select>
+      <textarea id="notesInput" class="notes-input" placeholder="Notes (optional)…" rows="2"></textarea>
       <div class="form-actions">
         <button class="btn" type="submit" id="submitBtn">Add</button>
         <button class="btn-secondary" type="button" id="cancelEditBtn" style="display:none">Cancel</button>
@@ -612,6 +639,7 @@ function normalizeTask(t) {
     due: t.due || "",
     status: ["todo", "doing", "done"].includes(t.status) ? t.status : "todo",
     priority: ["none", "low", "med", "high"].includes(t.priority) ? t.priority : "none",
+    notes: typeof t.notes === "string" ? t.notes : "",   // added later — old/imported tasks default to ""
     created: typeof t.created === "number" ? t.created : Date.now(),
   };
 }
@@ -658,13 +686,14 @@ function ymd(year, month, day) {
 }
 
 // --- CRUD ---
-function addTask(title, due, status, priority) {
+function addTask(title, due, status, priority, notes) {
   tasks.push({
     id: uid(),
     title: title.trim(),
     due: due || "",
     status: status || "todo",
     priority: priority || "none",
+    notes: (notes || "").trim(),
     created: Date.now(),
   });
   save();
@@ -815,10 +844,16 @@ function renderList() {
 
   listEl.innerHTML = "";
   rows.forEach(t => {
+    // Wrapper holds the card row + an optional expandable notes panel beneath it,
+    // so the panel can be full-width without disturbing the card's flex layout.
+    const item = document.createElement("div");
+    item.className = "task-item";
+
     const card = document.createElement("div");
     card.className = "task " + t.status;
 
     const overdue = t.due && t.due < today && t.status !== "done";
+    const hasNotes = !!(t.notes && t.notes.trim());
 
     card.innerHTML = `
       <input type="checkbox" ${t.status === "done" ? "checked" : ""} aria-label="Mark done" />
@@ -827,6 +862,7 @@ function renderList() {
         <div class="meta">
           <span class="pill ${t.status}">${STATUS_LABEL[t.status]}</span>
           ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
+          ${hasNotes ? `<button class="notes-toggle" aria-expanded="false" title="Show notes">📝 Notes</button>` : ""}
         </div>
       </div>
       <select aria-label="Change status">
@@ -860,7 +896,25 @@ function renderList() {
       if (confirm("Delete this task?")) deleteTask(t.id);
     });
 
-    listEl.appendChild(card);
+    item.appendChild(card);
+
+    // Notes: collapsed panel toggled by the 📝 button. Notes are inserted as
+    // textContent (never innerHTML) so a note can't inject markup. white-space
+    // in CSS preserves the user's line breaks.
+    if (hasNotes) {
+      const panel = document.createElement("div");
+      panel.className = "notes-panel";
+      panel.textContent = t.notes;
+      item.appendChild(panel);
+
+      const toggle = card.querySelector(".notes-toggle");
+      toggle.addEventListener("click", () => {
+        const open = item.classList.toggle("notes-open");
+        toggle.setAttribute("aria-expanded", String(open));
+      });
+    }
+
+    listEl.appendChild(item);
   });
 }
 
@@ -1170,6 +1224,7 @@ function startEdit(id) {
   document.getElementById("dueInput").value = t.due;
   document.getElementById("statusInput").value = t.status;
   document.getElementById("priorityInput").value = t.priority || "none";
+  document.getElementById("notesInput").value = t.notes || "";
   // Flip the UI into edit mode
   document.getElementById("submitBtn").textContent = "Save";
   document.getElementById("cancelEditBtn").style.display = "";
@@ -1197,15 +1252,16 @@ document.getElementById("addForm").addEventListener("submit", e => {
   const due = document.getElementById("dueInput").value;
   const status = document.getElementById("statusInput").value;
   const priority = document.getElementById("priorityInput").value;
+  const notes = document.getElementById("notesInput").value;
   if (!title.trim()) return;
 
   if (editingId) {
     // Edit mode: update the existing task
-    updateTask(editingId, { title: title.trim(), due: due || "", status, priority });
+    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, notes: notes.trim() });
     cancelEdit();
   } else {
     // Add mode: create a new task
-    addTask(title, due, status, priority);
+    addTask(title, due, status, priority, notes);
     e.target.reset();
     formOpen = false;          // collapse on mobile so the new task is visible
     applyFormOpen();

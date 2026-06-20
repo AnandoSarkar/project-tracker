@@ -48,6 +48,7 @@ A simple **project/task tracker web app**, built as a learning project to practi
   due: "YYYY-MM-DD" | "",
   status: "todo" | "doing" | "done",
   priority: "none" | "low" | "med" | "high",
+  notes: string,         // free-text, may be multi-line; "" when empty
   created: number        // Date.now() timestamp
 }
 ```
@@ -77,9 +78,9 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 ## Roadmap status (keep in sync with roadmap.html)
 
-- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md).
+- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** Gantt timeline, cloud sync (accounts + DB), project grouping, task notes/descriptions, subtasks/checklists, recurring tasks.
+- **Later:** Gantt timeline, cloud sync (accounts + DB), project grouping, subtasks/checklists, recurring tasks.
 
 ## Gotchas
 
