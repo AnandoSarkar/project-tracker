@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Project Tracker</title>
+<!-- PWA: manifest makes the app installable; theme-color tints the OS UI;
+     apple-touch-icon is the home-screen icon on iOS (which ignores the manifest icons). -->
+<link rel="manifest" href="./manifest.webmanifest" />
+<meta name="theme-color" content="#0c66e4" />
+<link rel="apple-touch-icon" href="./icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Tracker" />
 <style>
   :root {
     --bg: #f4f5f7;
@@ -1207,6 +1214,19 @@ if (tasks.length === 0 && !localStorage.getItem(STORE_KEY)) {
 }
 
 render();
+
+// --- PWA: register the service worker ---
+// Registration tells the browser about sw.js; it then runs in the
+// background and handles offline caching (see sw.js for the strategy).
+// Wrapped in a feature check + after load so it never blocks the app,
+// and registered with a relative path so it works under /project-tracker/.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => {
+      console.warn("Service worker registration failed:", err);
+    });
+  });
+}
 </script>
 </body>
 </html>

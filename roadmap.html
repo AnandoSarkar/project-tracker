@@ -35,9 +35,8 @@
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 620px) { .board { grid-template-columns: 1fr; } }
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
 
   .col { background: #ebecf0; border-radius: 10px; padding: 12px; }
   .col h2 { margin: 4px 6px 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
@@ -140,6 +139,36 @@ const ROADMAP = {
         learn: "Extending your data model safely",
         ship: "Shipped",
         d: "Done ✅ — a priority selector (None/Low/Med/High) on the form, coloured badges in list & kanban and a coloured dot on calendar chips, plus a High→Low sort. The key lesson: a backward-compatible migration in load() defaults older saved tasks to 'none' so existing browser data keeps working — real-world data versioning."
+      },
+      {
+        t: "Search & quick filters",
+        learn: "Live filtering UX",
+        ship: "Shipped",
+        d: "Done ✅ — a live search box that filters by title as you type, plus Overdue and High-priority toggle chips. The lesson: compose filters as a clean pipeline (status → search → chips), each step narrowing the list, with a filter-aware count ('X of Y shown') and a tailored empty state."
+      },
+      {
+        t: "Calendar polish",
+        learn: "Equal-width CSS grids & week math",
+        ship: "Shipped",
+        d: "Done ✅ — Monday-start weeks, shaded weekends, and equal-width columns via minmax(0,1fr) so a long task title clips instead of stretching its column. Verified live in the browser."
+      },
+      {
+        t: "Export / import (JSON)",
+        learn: "File download & upload in the browser",
+        ship: "Shipped",
+        d: "Done ✅ — Export downloads all tasks as a timestamped .json via a Blob + object URL; Import reads a file with FileReader, validates it (friendly errors for bad/wrong-shape files), and lets you replace or merge. You learned the browser Blob/File APIs and defensive parsing of untrusted input — plus a reusable normalizeTask() that upgrades old or imported data to the current shape."
+      },
+      {
+        t: "Dark mode",
+        learn: "Theming with CSS variables",
+        ship: "Shipped",
+        d: "Done ✅ — a 🌙/☀️ toggle in the header switches between light and dark. It defaults to your operating-system setting and remembers a manual override in localStorage. The lesson: because all colours were already CSS custom properties, dark mode was mostly defining a second set of values under [data-theme=\"dark\"] — the whole UI re-themes 'for free'. A pure resolveTheme() (saved choice wins, else follow system) is unit-tested in Node."
+      },
+      {
+        t: "PWA install",
+        learn: "Installable, offline-capable web apps",
+        ship: "Shipped",
+        d: "Done ✅ — the app is now a Progressive Web App: it can be installed to a phone or desktop home screen and opens full-screen, even offline. You added a manifest.webmanifest (name, icons, colours, display=standalone), generated 192/512 + maskable icons, and a service worker (sw.js) that precaches the 'app shell' and serves it cache-first. Key lessons: the SW lifecycle (install → activate → fetch), a versioned cache name so updates ship cleanly, and using relative paths so everything resolves under the /project-tracker/ subpath on GitHub Pages."
       }
     ]
   },
@@ -148,22 +177,9 @@ const ROADMAP = {
     note: "next steps",
     items: [
       {
-        t: "Search & quick filters",
-        learn: "Live filtering UX",
-        effort: "Small",
-        d: "A search box that filters tasks as you type, plus quick chips like 'Due today' / 'Overdue'. Teaches debouncing input and composing multiple filters cleanly."
-      }
-    ]
-  },
-  next: {
-    title: "Next",
-    note: "once basics feel solid",
-    items: [
-      {
-        t: "Export / import (JSON)",
-        learn: "File download & upload in the browser",
-        effort: "Medium",
-        d: "A button to download all tasks as a .json backup, and one to load it back. Teaches the Blob/File APIs and gives users a real escape hatch from browser-only storage."
+        t: "All caught up! 🎉",
+        learn: "Pick your next stretch goal from Later",
+        d: "Every planned 'Now' feature has shipped. Browse the Later column and pull whatever looks fun next — task notes is the smallest, cloud sync is the biggest leap."
       }
     ]
   },
@@ -184,10 +200,28 @@ const ROADMAP = {
         d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
       },
       {
-        t: "Polish: dark mode & PWA install",
-        learn: "Theming + installable web apps",
+        t: "Project grouping",
+        learn: "A one-to-many data relationship",
         effort: "Medium",
-        d: "A dark-mode toggle (CSS variables make this easy — you already use them) and a manifest + service worker so the app can be 'installed' to a phone home screen. Teaches theming and the basics of Progressive Web Apps."
+        d: "Organize tasks under multiple projects, with a project picker to filter each view. Teaches modelling a parent/child relationship (a project has many tasks) and adding a 'projectId' to your task shape — another safe, backward-compatible migration."
+      },
+      {
+        t: "Task notes / descriptions",
+        learn: "Richer fields + detail views",
+        effort: "Small",
+        d: "A longer free-text notes field on each task, shown in an expanded detail panel. Teaches handling multi-line text safely and designing a 'summary vs. detail' UI — the card stays compact, the notes live behind a click."
+      },
+      {
+        t: "Subtasks / checklists",
+        learn: "Nested lists + derived progress",
+        effort: "Medium",
+        d: "A checklist of sub-items inside a task, with a progress indicator (e.g. 2/5 done). Teaches storing an array within each task and computing derived state — the parent's progress is calculated from its children rather than stored separately."
+      },
+      {
+        t: "Recurring tasks",
+        learn: "Date arithmetic + generated instances",
+        effort: "Large",
+        d: "Tasks that repeat daily/weekly/monthly, auto-creating the next occurrence when one is completed. Teaches recurrence rules and date math (next due date), plus the tricky question of how to represent a repeating series vs. its individual instances."
       }
     ]
   }
