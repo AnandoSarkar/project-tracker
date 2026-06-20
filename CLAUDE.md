@@ -77,12 +77,13 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 ## Roadmap status (keep in sync with roadmap.html)
 
-- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache).
+- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** mobile redesign / responsive polish (phone UI feels busy/cramped), Gantt timeline, cloud sync (accounts + DB), project grouping, task notes/descriptions, subtasks/checklists, recurring tasks.
+- **Later:** Gantt timeline, cloud sync (accounts + DB), project grouping, task notes/descriptions, subtasks/checklists, recurring tasks.
 
 ## Gotchas
 
 - `localStorage` is per-browser — data doesn't sync across devices (by design, until cloud sync).
 - The live site only updates when `main` is pushed; a feature branch or unpushed local changes won't appear at the Pages URL.
 - GitHub Pages can cache briefly after a push; give it a minute before assuming a deploy didn't work.
+- **The service worker caches the app shell, so a normal push won't reach returning visitors until the cache name is bumped.** When you change `index.html` (or any cached file), bump `CACHE` in `sw.js` (e.g. `v2` → `v3`) in the same commit — otherwise the old cached page keeps being served. Note the SW also takes over on the *next* load, so the first refresh after deploy may still show the old version; a second refresh (or reopening the installed app) shows the update.

@@ -169,6 +169,12 @@ const ROADMAP = {
         learn: "Installable, offline-capable web apps",
         ship: "Shipped",
         d: "Done ✅ — the app is now a Progressive Web App: it can be installed to a phone or desktop home screen and opens full-screen, even offline. You added a manifest.webmanifest (name, icons, colours, display=standalone), generated 192/512 + maskable icons, and a service worker (sw.js) that precaches the 'app shell' and serves it cache-first. Key lessons: the SW lifecycle (install → activate → fetch), a versioned cache name so updates ship cleanly, and using relative paths so everything resolves under the /project-tracker/ subpath on GitHub Pages."
+      },
+      {
+        t: "Mobile redesign / responsive polish",
+        learn: "Mobile-first responsive design",
+        ship: "Shipped",
+        d: "Done ✅ — the phone layout was cramped: the whole screen filled with chrome before a single task appeared. A design critique (see MOBILE-REDESIGN.md) drove a prioritised fix list, all shipped under the mobile breakpoint: the add-task form now collapses behind a '+ Add task' button so the task list comes first; task titles get their own full-width row instead of wrapping into a sliver; the view tabs scroll sideways; filter/sort and section spacing are tightened; and the checkbox is a bigger tap target. Verified live on both mobile and desktop. The gotcha worth remembering: the service worker kept serving the old cached page until the cache name was bumped (v1 → v2) — always bump it when shipping app changes."
       }
     ]
   },
@@ -187,12 +193,6 @@ const ROADMAP = {
     title: "Later",
     note: "stretch goals",
     items: [
-      {
-        t: "Mobile redesign / responsive polish",
-        learn: "Responsive design for small screens",
-        effort: "Medium",
-        d: "The app feels busy and cramped on a phone — header buttons, tabs, the add-task form, and the filter bar all compete for space. This task rethinks the small-screen layout: a tighter header, a form that collapses or moves out of the way until needed, and breathing room between controls. Teaches mobile-first responsive design — using media queries and layout choices so the same single page feels uncluttered on a narrow screen while staying full-featured on desktop. (Especially relevant now that it's an installed PWA you'll open on your phone.) HOW TO START: capture screenshots of the live site at an iPhone width (~390px) and run the 'design:design-critique' skill on them to turn the vague 'feels busy' into a concrete fix list; 'design:accessibility-review' will catch small tap targets / contrast issues, and 'design:ux-writing' can tighten any cramped labels. Let the critique drive the to-do list rather than guessing. A critique has already been run — see MOBILE-REDESIGN.md for the prioritised fix list (collapse the form, give task titles their own row, tighten spacing, fix tab/filter wrapping, enlarge the checkbox tap target)."
-      },
       {
         t: "Gantt-style timeline",
         learn: "Computed layout from data",
