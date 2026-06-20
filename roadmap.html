@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Project Tracker — Feature Roadmap</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --ink: #172b4d;
+    --muted: #6b778c;
+    --line: #dfe1e6;
+    --accent: #0c66e4;
+    --now: #1f845a;
+    --next: #b25e02;
+    --later: #5e4db2;
+    --shadow: 0 1px 3px rgba(9, 30, 66, 0.13);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 22px 24px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 6px 0 0; color: var(--muted); font-size: 14px; max-width: 760px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+
+  .col { background: #ebecf0; border-radius: 10px; padding: 12px; }
+  .col h2 { margin: 4px 6px 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .col h2 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: auto; }
+  .col.now h2 .dot { background: var(--now); }
+  .col.next h2 .dot { background: var(--next); }
+  .col.later h2 .dot { background: var(--later); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(9,30,66,.18); }
+  .now .card { border-left-color: var(--now); }
+  .next .card { border-left-color: var(--next); }
+  .later .card { border-left-color: var(--later); }
+  .card h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .card .learn { display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--accent); background: #e9f2ff; padding: 2px 8px; border-radius: 999px; }
+  .card .detail { margin-top: 8px; font-size: 13px; color: var(--muted); display: none; }
+  .card.open .detail { display: block; }
+  .card .chev { margin-left: auto; color: var(--muted); font-size: 12px; transition: transform .12s ease; }
+  .card.open .chev { transform: rotate(90deg); }
+
+  .effort { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .effort b { color: var(--ink); font-weight: 600; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ Project Tracker — Feature Roadmap</h1>
+    <p>A learning-first roadmap. Features are ordered by how much each one teaches you, building from skills you already have toward new ones. Click any card to expand it.</p>
+  </header>
+
+  <div class="wrap">
+    <p class="hint">Tip: tackle them roughly left-to-right, top-to-bottom. Each card notes the new skill it teaches and a rough effort level.</p>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--now)"></i> Now — your immediate next steps</span>
+      <span><i class="dot" style="background:var(--next)"></i> Next — once the basics feel solid</span>
+      <span><i class="dot" style="background:var(--later)"></i> Later — stretch goals</span>
+    </div>
+
+    <div class="board" id="board"></div>
+  </div>
+
+  <footer>Click cards to expand · part of your learning project</footer>
+
+<script>
+const ROADMAP = {
+  now: {
+    title: "Now",
+    note: "next steps",
+    items: [
+      {
+        t: "Kanban board view",
+        learn: "DOM rendering + drag & drop",
+        effort: "Medium",
+        d: "Columns for To Do / In Progress / Done with draggable cards. The code already has a disabled Kanban tab and a VIEWS router waiting — you write one renderKanban() function and enable the tab. Teaches you the HTML Drag-and-Drop API and how a view-switcher architecture pays off."
+      },
+      {
+        t: "Edit an existing task",
+        learn: "Reusing form state for create + edit",
+        effort: "Small",
+        d: "Right now you can add and delete but not edit a task's title or date. Add an inline edit (or a small modal). Teaches you how one form can serve two modes, a pattern you'll use constantly."
+      },
+      {
+        t: "Task priority + colour tags",
+        learn: "Extending your data model safely",
+        effort: "Small",
+        d: "Add a priority field (Low/Med/High) and show it as a coloured badge. Teaches you how to add a new property to existing saved data without breaking older tasks — a real-world versioning lesson."
+      }
+    ]
+  },
+  next: {
+    title: "Next",
+    note: "once basics feel solid",
+    items: [
+      {
+        t: "Calendar (month) view",
+        learn: "Working with dates & grids",
+        effort: "Medium",
+        d: "A month grid that drops each task onto its due date. Teaches you date math (first day of month, days in month, week alignment) and building a grid layout — genuinely useful date-handling skills."
+      },
+      {
+        t: "Search & quick filters",
+        learn: "Live filtering UX",
+        effort: "Small",
+        d: "A search box that filters tasks as you type, plus quick chips like 'Due today' / 'Overdue'. Teaches debouncing input and composing multiple filters cleanly."
+      },
+      {
+        t: "Export / import (JSON)",
+        learn: "File download & upload in the browser",
+        effort: "Medium",
+        d: "A button to download all tasks as a .json backup, and one to load it back. Teaches the Blob/File APIs and gives users a real escape hatch from browser-only storage."
+      }
+    ]
+  },
+  later: {
+    title: "Later",
+    note: "stretch goals",
+    items: [
+      {
+        t: "Gantt-style timeline",
+        learn: "Computed layout from data",
+        effort: "Large",
+        d: "Horizontal bars spanning each task's start→due across a date axis. The most involved view: you calculate bar position and width from dates. Teaches translating data into precise pixel layout — a big step up."
+      },
+      {
+        t: "Cloud sync (accounts + database)",
+        learn: "Backend, auth & APIs",
+        effort: "Large",
+        d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
+      },
+      {
+        t: "Polish: dark mode & PWA install",
+        learn: "Theming + installable web apps",
+        effort: "Medium",
+        d: "A dark-mode toggle (CSS variables make this easy — you already use them) and a manifest + service worker so the app can be 'installed' to a phone home screen. Teaches theming and the basics of Progressive Web Apps."
+      }
+    ]
+  }
+};
+
+const board = document.getElementById("board");
+Object.keys(ROADMAP).forEach(key => {
+  const col = ROADMAP[key];
+  const wrap = document.createElement("div");
+  wrap.className = "col " + key;
+  wrap.innerHTML = `<h2><span class="dot"></span>${col.title}<small>${col.note}</small></h2>`;
+  col.items.forEach(item => {
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerHTML = `
+      <h3>${item.t}<span class="chev">▶</span></h3>
+      <span class="learn">${item.learn}</span>
+      <div class="detail">
+        <p style="margin:0 0 6px">${item.d}</p>
+        <div class="effort">Effort: <b>${item.effort}</b></div>
+      </div>`;
+    c.addEventListener("click", () => c.classList.toggle("open"));
+    wrap.appendChild(c);
+  });
+  board.appendChild(wrap);
+});
+</script>
+</body>
+</html>
