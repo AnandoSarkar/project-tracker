@@ -121,6 +121,24 @@
   .task select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; font-family: inherit; }
   .del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; }
   .del:hover { color: var(--red); }
+  .edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 4px; line-height: 1; }
+  .edit:hover { color: var(--accent); }
+
+  /* Add-form switches to "edit mode" while editing a task */
+  .add-form.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .form-actions { display: flex; gap: 8px; }
+  .btn-secondary {
+    background: var(--card); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .btn-secondary:hover { background: var(--bg); }
+  .editing-banner {
+    display: none;
+    font-size: 12px; color: var(--accent); font-weight: 600;
+    margin: -8px 0 12px;
+  }
+  .editing-banner.show { display: block; }
 
   .empty { text-align: center; color: var(--muted); padding: 50px 20px; border: 2px dashed var(--line); border-radius: 8px; }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
@@ -151,8 +169,12 @@
           <option value="doing">In Progress</option>
           <option value="done">Done</option>
         </select>
-        <button class="btn" type="submit">Add</button>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="submitBtn">Add</button>
+          <button class="btn-secondary" type="button" id="cancelEditBtn" style="display:none">Cancel</button>
+        </div>
       </form>
+      <div class="editing-banner" id="editingBanner">✏️ Editing task — make your changes and click Save.</div>
 
       <div class="controls">
         <label for="filterStatus">Filter:</label>
@@ -189,6 +211,7 @@ const STORE_KEY = "projectTracker.tasks.v1";
 // --- State ---
 let tasks = load();
 let currentView = "list";
+let editingId = null;   // null = form is in "add" mode; otherwise the id being edited
 
 // --- Persistence ---
 function load() {
@@ -239,6 +262,7 @@ function updateTask(id, changes) {
 }
 function deleteTask(id) {
   tasks = tasks.filter(t => t.id !== id);
+  if (editingId === id) cancelEdit();  // bail out of edit mode if we deleted the task being edited
   save();
   render();
 }
@@ -292,6 +316,7 @@ function renderList() {
         <option value="doing">In Progress</option>
         <option value="done">Done</option>
       </select>
+      <button class="edit" aria-label="Edit task" title="Edit">✏️</button>
       <button class="del" aria-label="Delete task" title="Delete">✕</button>
     `;
 
@@ -305,6 +330,9 @@ function renderList() {
     });
     card.querySelector("select").addEventListener("change", e => {
       updateTask(t.id, { status: e.target.value });
+    });
+    card.querySelector(".edit").addEventListener("click", () => {
+      startEdit(t.id);
     });
     card.querySelector(".del").addEventListener("click", () => {
       if (confirm("Delete this task?")) deleteTask(t.id);
@@ -325,6 +353,32 @@ function render() {
   (VIEWS[currentView] || renderList)();
 }
 
+// --- Edit mode (the "one form, two modes" pattern) ---
+function startEdit(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  editingId = id;
+  // Pre-fill the form with this task's current values
+  document.getElementById("titleInput").value = t.title;
+  document.getElementById("dueInput").value = t.due;
+  document.getElementById("statusInput").value = t.status;
+  // Flip the UI into edit mode
+  document.getElementById("submitBtn").textContent = "Save";
+  document.getElementById("cancelEditBtn").style.display = "";
+  document.getElementById("addForm").classList.add("editing");
+  document.getElementById("editingBanner").classList.add("show");
+  document.getElementById("titleInput").focus();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function cancelEdit() {
+  editingId = null;
+  document.getElementById("addForm").reset();
+  document.getElementById("submitBtn").textContent = "Add";
+  document.getElementById("cancelEditBtn").style.display = "none";
+  document.getElementById("addForm").classList.remove("editing");
+  document.getElementById("editingBanner").classList.remove("show");
+}
+
 // --- Event wiring ---
 document.getElementById("addForm").addEventListener("submit", e => {
   e.preventDefault();
@@ -332,10 +386,20 @@ document.getElementById("addForm").addEventListener("submit", e => {
   const due = document.getElementById("dueInput").value;
   const status = document.getElementById("statusInput").value;
   if (!title.trim()) return;
-  addTask(title, due, status);
-  e.target.reset();
-  document.getElementById("titleInput").focus();
+
+  if (editingId) {
+    // Edit mode: update the existing task
+    updateTask(editingId, { title: title.trim(), due: due || "", status });
+    cancelEdit();
+  } else {
+    // Add mode: create a new task
+    addTask(title, due, status);
+    e.target.reset();
+    document.getElementById("titleInput").focus();
+  }
 });
+
+document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
 
 document.getElementById("filterStatus").addEventListener("change", render);
 document.getElementById("sortBy").addEventListener("change", render);
