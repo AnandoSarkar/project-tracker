@@ -64,6 +64,20 @@ manifest.webmanifest  # unchanged
 - The view code (`renderList`, `renderGantt`, etc.) is untouched — it keeps calling the same
   functions. **This is the whole point of routing through one seam.**
 
+## Write strategy (Phase 5 — decided)
+
+- **Per-row operations**: `addTask`→upsert, `updateTask`→upsert, `deleteTask`→delete, etc.
+  Matched on `(user_id, client_id)` via a unique constraint (added in a Phase-5 migration) so
+  `upsert(..., {onConflict:"user_id,client_id"})` works. The app keeps its `uid()` string ids in
+  the `client_id` column; the DB uuid PK is internal. So **nothing in the app learns about uuids**.
+- **Reads**: `Cloud.fetchAll()` once on login/restore → replace in-memory arrays → render. Logout
+  reloads from localStorage. (No live multi-device updates in v1.)
+- **Writes are fire-and-forget**: the in-memory mutation + render happen synchronously (instant
+  UI); the cloud op runs in the background and surfaces a dismissible banner on failure.
+  localStorage is always written too, as an offline cache mirror.
+- `deleteProject` pushes the reassigned tasks/milestones (project_id→null) then deletes the project
+  row — matching the in-memory reassign-orphans rule (the FK is also ON DELETE SET NULL).
+
 ## Database schema (Supabase / Postgres)
 
 Three tables mirroring the current object shapes, each scoped to a user via `user_id`.

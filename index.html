@@ -272,6 +272,13 @@
   .pp-item .pp-delete:hover { color: var(--red); background: var(--red-soft); }
   .pp-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 
+  /* Sync error banner */
+  .sync-banner {
+    background: var(--prio-high-bg, #ffe2dd); color: var(--red);
+    border: 1px solid var(--red); border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 14px; font-size: 13px;
+  }
+
   /* Account / auth panel */
   .auth-intro { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
   .auth-form { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
@@ -556,6 +563,9 @@
   </header>
 
   <div class="wrap">
+    <!-- Sync error banner (hidden until a cloud write/read fails). -->
+    <div class="sync-banner" id="syncBanner" hidden></div>
+
     <!-- Account / auth panel (collapsible). Reuses .projects-panel / .pp-* styling.
          Body is rendered by JS: a sign-in/up form when logged out, account info when in. -->
     <section class="projects-panel" id="accountPanel" hidden>
@@ -919,6 +929,31 @@ function loadMilestones() {
 function saveMilestones() {
   Store.writeCollection("milestones", milestones);
 }
+
+// --- Cloud write seam (Phase 5) ------------------------------------------
+// cloudUser is set by the auth listener (null = logged out / local-only).
+// When logged in, CRUD funcs call these to persist the specific changed row to
+// Supabase. They're fire-and-forget: the in-memory mutation + render already
+// happened synchronously (instant UI); a failure surfaces a small banner but
+// doesn't block. localStorage is ALWAYS written too, as an offline cache.
+let cloudUser = null;   // Supabase user object when signed in, else null
+
+function cloudEnabled() {
+  return !!(cloudUser && window.Cloud && window.Cloud.isConfigured);
+}
+function cloudFail(action, err) {
+  console.warn("Cloud " + action + " failed:", err);
+  showSyncError("Couldn't sync to the cloud (" + action + "). Your change is saved on this device.");
+}
+// Each wrapper no-ops when logged out; when logged in it runs the cloud op and
+// surfaces errors. `await`-free callers — we intentionally don't block the UI.
+function cloudUpsertTask(t)   { if (cloudEnabled()) Cloud.upsertTask(t, cloudUser.id).then(r => r.error && cloudFail("save task", r.error)); }
+function cloudDeleteTask(id)  { if (cloudEnabled()) Cloud.deleteTaskRow(id, cloudUser.id).then(r => r.error && cloudFail("delete task", r.error)); }
+function cloudUpsertProject(p){ if (cloudEnabled()) Cloud.upsertProject(p, cloudUser.id).then(r => r.error && cloudFail("save project", r.error)); }
+function cloudDeleteProject(id){ if (cloudEnabled()) Cloud.deleteProjectRow(id, cloudUser.id).then(r => r.error && cloudFail("delete project", r.error)); }
+function cloudUpsertMilestone(m){ if (cloudEnabled()) Cloud.upsertMilestone(m, cloudUser.id).then(r => r.error && cloudFail("save milestone", r.error)); }
+function cloudDeleteMilestone(id){ if (cloudEnabled()) Cloud.deleteMilestoneRow(id, cloudUser.id).then(r => r.error && cloudFail("delete milestone", r.error)); }
+
 // Look up a project's name by id; "" or unknown id → null (treated as "No project").
 function projectName(id) {
   if (!id) return null;
@@ -1040,6 +1075,7 @@ function addTask(title, due, status, priority, notes, projectId, subtasks, start
     created: Date.now(),
   });
   save();
+  cloudUpsertTask(tasks[tasks.length - 1]);
   render();
 }
 function updateTask(id, changes) {
@@ -1047,12 +1083,14 @@ function updateTask(id, changes) {
   if (!t) return;
   Object.assign(t, changes);
   save();
+  cloudUpsertTask(t);
   render();
 }
 function deleteTask(id) {
   tasks = tasks.filter(t => t.id !== id);
   if (editingId === id) cancelEdit();  // bail out of edit mode if we deleted the task being edited
   save();
+  cloudDeleteTask(id);
   render();
 }
 
@@ -1064,6 +1102,7 @@ function addSubtask(taskId, text) {
   if (!Array.isArray(t.subtasks)) t.subtasks = [];
   t.subtasks.push({ id: uid(), text: clean, done: false });
   save();
+  cloudUpsertTask(t);
   render();
 }
 function toggleSubtask(taskId, subId) {
@@ -1073,6 +1112,7 @@ function toggleSubtask(taskId, subId) {
   if (!s) return;
   s.done = !s.done;
   save();
+  cloudUpsertTask(t);
   render();
 }
 function deleteSubtask(taskId, subId) {
@@ -1080,6 +1120,7 @@ function deleteSubtask(taskId, subId) {
   if (!t || !Array.isArray(t.subtasks)) return;
   t.subtasks = t.subtasks.filter(s => s.id !== subId);
   save();
+  cloudUpsertTask(t);
   render();
 }
 
@@ -1090,6 +1131,7 @@ function addProject(name) {
   const p = { id: uid(), name: clean, created: Date.now() };
   projects.push(p);
   saveProjects();
+  cloudUpsertProject(p);
   return p;
 }
 function renameProject(id, name) {
@@ -1098,25 +1140,33 @@ function renameProject(id, name) {
   if (!p || !clean) return;
   p.name = clean;
   saveProjects();
+  cloudUpsertProject(p);
   render();
 }
 // Deleting a project must NOT orphan its tasks: reassign them to "" (No project).
 // Returns how many tasks were reassigned so the UI can mention it.
 function deleteProject(id) {
   let reassigned = 0;
+  const touchedTasks = [], touchedMilestones = [];
   tasks.forEach(t => {
-    if (t.projectId === id) { t.projectId = ""; reassigned++; }
+    if (t.projectId === id) { t.projectId = ""; reassigned++; touchedTasks.push(t); }
   });
   // Same referential-integrity rule for milestones: don't orphan them pointing at
   // a dead projectId — reassign to "" (no project), mirroring the task handling.
   milestones.forEach(m => {
-    if (m.projectId === id) { m.projectId = ""; reassigned++; }
+    if (m.projectId === id) { m.projectId = ""; reassigned++; touchedMilestones.push(m); }
   });
   projects = projects.filter(p => p.id !== id);
   if (projectFilter === id) projectFilter = "all";   // don't get stuck filtering a deleted project
   save();
   saveProjects();
   saveMilestones();
+  // Cloud: push the reassigned rows (now project_id=null), then delete the project.
+  // (The DB FK is ON DELETE SET NULL too, but we update explicitly so the cloud
+  // matches memory immediately rather than relying on cascade timing.)
+  touchedTasks.forEach(cloudUpsertTask);
+  touchedMilestones.forEach(cloudUpsertMilestone);
+  cloudDeleteProject(id);
   render();
   return reassigned;   // total items (tasks + milestones) reassigned
 }
@@ -1129,6 +1179,7 @@ function addMilestone(name, date, projectId) {
   const m = { id: uid(), name: clean, date: date, projectId: projectId || "", dependsOn: [], created: Date.now() };
   milestones.push(m);
   saveMilestones();
+  cloudUpsertMilestone(m);
   return m;
 }
 function renameMilestone(id, name) {
@@ -1137,6 +1188,7 @@ function renameMilestone(id, name) {
   if (!m || !clean) return;
   m.name = clean;
   saveMilestones();
+  cloudUpsertMilestone(m);
   render();
 }
 function setMilestoneDate(id, date) {
@@ -1144,11 +1196,13 @@ function setMilestoneDate(id, date) {
   if (!m || !date) return;
   m.date = date;
   saveMilestones();
+  cloudUpsertMilestone(m);
   render();
 }
 function deleteMilestone(id) {
   milestones = milestones.filter(m => m.id !== id);
   saveMilestones();
+  cloudDeleteMilestone(id);
   render();
 }
 
@@ -2474,8 +2528,8 @@ function renderAccountPanel() {
     if (error) {
       setAuthMsg(error, "error");
     } else if (mode === "signup") {
-      // Supabase may require email confirmation depending on project settings.
-      setAuthMsg("Account created. If email confirmation is on, check your inbox, then sign in.", "ok");
+      // Email confirmation is off for this project → the user is signed in right away.
+      setAuthMsg("Account created — you're signed in.", "ok");
     }
     // On successful sign-in, onAuthChange fires and re-renders the panel.
   });
@@ -2493,6 +2547,17 @@ function setAuthMsg(text, kind) {
   msg.className = "auth-msg" + (kind ? " " + kind : "");
 }
 
+// Show a dismissible sync-error banner (auto-hides after a while).
+let _syncBannerTimer = null;
+function showSyncError(text) {
+  const b = document.getElementById("syncBanner");
+  if (!b) return;
+  b.textContent = text;
+  b.hidden = false;
+  clearTimeout(_syncBannerTimer);
+  _syncBannerTimer = setTimeout(() => { b.hidden = true; }, 6000);
+}
+
 // Open/close the account panel (closes the other panels for symmetry).
 document.getElementById("accountBtn").addEventListener("click", () => {
   const panel = document.getElementById("accountPanel");
@@ -2508,16 +2573,52 @@ document.getElementById("accountClose").addEventListener("click", () => {
   document.getElementById("accountPanel").hidden = true;
 });
 
+// Switch the app to cloud-backed data: fetch everything for the user, replace the
+// in-memory arrays, persist a local cache copy, and re-render. On error, stay on
+// whatever's in memory and surface a banner.
+async function enterCloudMode(user) {
+  cloudUser = user;
+  try {
+    const data = await Cloud.fetchAll();
+    if (!data) return;
+    tasks = data.tasks.map(normalizeTask);
+    projects = data.projects.map(normalizeProject);
+    milestones = data.milestones.map(normalizeMilestone);
+    // keep the local cache mirrored (offline-open shows last cloud state)
+    save(); saveProjects(); saveMilestones();
+    render();
+  } catch (e) {
+    cloudFail("load", e.message || e);
+  }
+}
+// Back to local-only: reload from localStorage and render.
+function enterLocalMode() {
+  cloudUser = null;
+  tasks = load();
+  projects = loadProjects();
+  milestones = loadMilestones();
+  render();
+}
+
 // Wire up to Cloud once it's ready (the SDK loads async as a deferred module).
 function initAccount() {
   if (!window.Cloud || !window.Cloud.isConfigured) { syncAccountButton(); return; }
-  // Reflect any restored session, then react to future changes.
-  window.Cloud.getUser().then(u => { currentUser = u; syncAccountButton(); });
+  let lastUserId = null;   // guard so we only switch modes on actual change
   window.Cloud.onAuthChange(session => {
-    currentUser = session ? session.user : null;
+    const user = session ? session.user : null;
+    currentUser = user;
     syncAccountButton();
-    // Keep the open panel in sync (e.g. it flips to "signed in as…" on login).
     if (!document.getElementById("accountPanel").hidden) renderAccountPanel();
+    const uid = user ? user.id : null;
+    if (uid === lastUserId) return;     // no change in who's logged in
+    lastUserId = uid;
+    if (user) enterCloudMode(user);
+    else enterLocalMode();
+  });
+  // Handle a session already restored before the listener attached.
+  window.Cloud.getUser().then(u => {
+    currentUser = u; syncAccountButton();
+    if (u && lastUserId !== u.id) { lastUserId = u.id; enterCloudMode(u); }
   });
 }
 if (window.Cloud) initAccount();

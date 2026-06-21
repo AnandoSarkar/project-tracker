@@ -66,6 +66,121 @@ async function signOut() {
   return { error: error ? error.message : null };
 }
 
+// --- Data layer (Phase 5) -------------------------------------------------
+// The app keeps using its own string ids (uid()). In the DB those live in the
+// `client_id` column and are the key we match on; the DB's uuid PK is internal.
+// These mappers translate between app shape and DB columns.
+
+function taskToRow(t, userId) {
+  return {
+    user_id: userId,
+    client_id: t.id,
+    title: t.title,
+    start: t.start || null,         // "" -> null (DB date column)
+    due: t.due || null,
+    status: t.status,
+    priority: t.priority,
+    notes: t.notes || "",
+    project_id: null,               // set via projectUuid map by the caller wrapper below
+    subtasks: t.subtasks || [],
+    created: new Date(t.created || Date.now()).toISOString(),
+  };
+}
+function rowToTask(r) {
+  return {
+    id: r.client_id || r.id,
+    title: r.title || "",
+    start: r.start || "",
+    due: r.due || "",
+    status: r.status || "todo",
+    priority: r.priority || "none",
+    notes: r.notes || "",
+    projectId: r._project_client_id || "",   // resolved from the join map
+    subtasks: Array.isArray(r.subtasks) ? r.subtasks : [],
+    created: r.created ? new Date(r.created).getTime() : Date.now(),
+  };
+}
+
+// Read every collection for the signed-in user and return them in APP shape.
+// projectId references are kept as the app's string ids (client_id) throughout,
+// so nothing in the app has to learn about uuids.
+async function fetchAll() {
+  if (!client) return null;
+  const [proj, task, mile] = await Promise.all([
+    client.from("projects").select("*"),
+    client.from("tasks").select("*"),
+    client.from("milestones").select("*"),
+  ]);
+  if (proj.error || task.error || mile.error) {
+    throw new Error((proj.error || task.error || mile.error).message);
+  }
+  // Build uuid -> client_id map so task/milestone project_id (a uuid) maps back
+  // to the app's string projectId.
+  const uuidToClient = {};
+  proj.data.forEach(p => { uuidToClient[p.id] = p.client_id || p.id; });
+
+  const projects = proj.data.map(p => ({
+    id: p.client_id || p.id,
+    name: p.name || "",
+    created: p.created ? new Date(p.created).getTime() : Date.now(),
+  }));
+  const tasks = task.data.map(r => {
+    r._project_client_id = r.project_id ? (uuidToClient[r.project_id] || "") : "";
+    return rowToTask(r);
+  });
+  const milestones = mile.data.map(m => ({
+    id: m.client_id || m.id,
+    name: m.name || "",
+    date: m.date || "",
+    projectId: m.project_id ? (uuidToClient[m.project_id] || "") : "",
+    dependsOn: Array.isArray(m.depends_on) ? m.depends_on : [],
+    created: m.created ? new Date(m.created).getTime() : Date.now(),
+  }));
+  return { projects, tasks, milestones };
+}
+
+// Resolve an app projectId (string) to the DB uuid for the current user.
+async function projectUuidFor(clientProjectId) {
+  if (!clientProjectId) return null;
+  const { data } = await client.from("projects").select("id").eq("client_id", clientProjectId).maybeSingle();
+  return data ? data.id : null;
+}
+
+// Per-row upserts/deletes, matched on (user_id, client_id). Each returns {error}.
+async function upsertTask(t, userId) {
+  const row = taskToRow(t, userId);
+  row.project_id = await projectUuidFor(t.projectId);
+  const { error } = await client.from("tasks").upsert(row, { onConflict: "user_id,client_id" });
+  return { error: error ? error.message : null };
+}
+async function deleteTaskRow(clientId, userId) {
+  const { error } = await client.from("tasks").delete().eq("user_id", userId).eq("client_id", clientId);
+  return { error: error ? error.message : null };
+}
+async function upsertProject(p, userId) {
+  const row = { user_id: userId, client_id: p.id, name: p.name, created: new Date(p.created || Date.now()).toISOString() };
+  const { error } = await client.from("projects").upsert(row, { onConflict: "user_id,client_id" });
+  return { error: error ? error.message : null };
+}
+async function deleteProjectRow(clientId, userId) {
+  const { error } = await client.from("projects").delete().eq("user_id", userId).eq("client_id", clientId);
+  return { error: error ? error.message : null };
+}
+async function upsertMilestone(m, userId) {
+  const row = {
+    user_id: userId, client_id: m.id, name: m.name, date: m.date || null,
+    project_id: await projectUuidFor(m.projectId),
+    depends_on: m.dependsOn || [],
+    created: new Date(m.created || Date.now()).toISOString(),
+  };
+  const { error } = await client.from("milestones").upsert(row, { onConflict: "user_id,client_id" });
+  return { error: error ? error.message : null };
+}
+async function deleteMilestoneRow(clientId, userId) {
+  const { error } = await client.from("milestones").delete().eq("user_id", userId).eq("client_id", clientId);
+  return { error: error ? error.message : null };
+}
+
 window.Cloud = {
   get client() { return client; },   // raw client for later phases (queries)
   isConfigured: !!client,
@@ -75,6 +190,10 @@ window.Cloud = {
   signUp,
   signIn,
   signOut,
+  fetchAll,
+  upsertTask, deleteTaskRow,
+  upsertProject, deleteProjectRow,
+  upsertMilestone, deleteMilestoneRow,
 };
 
 // Signal readiness so the app can react once the module has loaded (it's deferred).
