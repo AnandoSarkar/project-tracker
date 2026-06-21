@@ -699,6 +699,11 @@
 
   <footer>Built as a learning project · data stored locally in your browser</footer>
 
+<!-- Persistence seam: loaded before the app script so window.Store exists when
+     the app's load/save wrappers run. Both are classic scripts, so they execute
+     in order. (The app wires all events via addEventListener — no inline handlers —
+     so nothing depends on these globals before this point.) -->
+<script src="./js/store.js"></script>
 <script>
 /* ---------------------------------------------------------
    Project Tracker — vanilla JS, localStorage persistence
@@ -706,10 +711,7 @@
    by adding a render function + enabling the tab.
 --------------------------------------------------------- */
 
-const STORE_KEY = "projectTracker.tasks.v1";
-const PROJECTS_KEY = "projectTracker.projects.v1";   // projects stored separately from tasks
-const MILESTONES_KEY = "projectTracker.milestones.v1";   // milestones: their own object type (Gantt)
-const THEME_KEY = "projectTracker.theme";   // stores "light" | "dark" (absent = follow system)
+// Storage keys now live in js/store.js (the persistence seam) — single source of truth.
 
 // --- Theme (dark mode) ---
 // Decide which theme to show: an explicit saved choice always wins; otherwise
@@ -728,13 +730,13 @@ function systemPrefersDark() {
   return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
+  const saved = Store.readValue("theme");
   applyTheme(resolveTheme(saved, systemPrefersDark()));
 }
 function toggleTheme() {
   const now = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   const next = now === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, next);   // toggling makes the choice explicit & sticky
+  Store.writeValue("theme", next);   // toggling makes the choice explicit & sticky
   applyTheme(next);
 }
 // Apply as early as possible to minimise any flash of the wrong theme.
@@ -813,14 +815,8 @@ let openDetailIds = new Set();                      // task ids whose detail pan
 
 // --- Persistence ---
 function load() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return parsed.map(normalizeTask);
-  } catch (e) {
-    console.warn("Could not load tasks:", e);
-    return [];
-  }
+  // Storage read goes through the Store seam; normalization stays here.
+  return Store.readCollection("tasks").map(normalizeTask);
 }
 // Normalize a task object so older/imported data has every field we expect.
 // Defaults are set first, then the source spreads over them — so existing
@@ -877,33 +873,19 @@ function normalizeMilestone(m) {
   };
 }
 function save() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(tasks));
+  Store.writeCollection("tasks", tasks);
 }
 function loadProjects() {
-  try {
-    const raw = localStorage.getItem(PROJECTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(normalizeProject) : [];
-  } catch (e) {
-    console.warn("Could not load projects:", e);
-    return [];
-  }
+  return Store.readCollection("projects").map(normalizeProject);
 }
 function saveProjects() {
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  Store.writeCollection("projects", projects);
 }
 function loadMilestones() {
-  try {
-    const raw = localStorage.getItem(MILESTONES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(normalizeMilestone) : [];
-  } catch (e) {
-    console.warn("Could not load milestones:", e);
-    return [];
-  }
+  return Store.readCollection("milestones").map(normalizeMilestone);
 }
 function saveMilestones() {
-  localStorage.setItem(MILESTONES_KEY, JSON.stringify(milestones));
+  Store.writeCollection("milestones", milestones);
 }
 // Look up a project's name by id; "" or unknown id → null (treated as "No project").
 function projectName(id) {
@@ -2353,7 +2335,7 @@ document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 // If the user hasn't picked a theme, keep following the OS as it changes live.
 if (window.matchMedia) {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
-    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? "dark" : "light");
+    if (!Store.readValue("theme")) applyTheme(e.matches ? "dark" : "light");
   });
 }
 
@@ -2378,7 +2360,7 @@ document.getElementById("tabs").addEventListener("click", e => {
 });
 
 // --- Seed a couple of sample tasks on first ever visit ---
-if (tasks.length === 0 && !localStorage.getItem(STORE_KEY)) {
+if (tasks.length === 0 && !Store.has("tasks")) {
   const t = todayStr();
   tasks = [
     { id: uid(), title: "Welcome! Edit or delete me 👋", due: t, status: "todo", priority: "none", created: Date.now() },

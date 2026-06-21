@@ -13,7 +13,7 @@
 // The name is part of the cache key, so a new version creates a
 // fresh cache and the old one gets deleted in `activate` below.
 // (This is how you ship updates — otherwise users keep the old cached copy.)
-const CACHE = "project-tracker-v10";
+const CACHE = "project-tracker-v11";
 
 // The "app shell": the minimum set of files needed to render the
 // app. Tasks themselves live in localStorage, so once these are
@@ -22,6 +22,7 @@ const CACHE = "project-tracker-v10";
 const SHELL = [
   "./",
   "./index.html",
+  "./js/store.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
