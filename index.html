@@ -192,6 +192,14 @@
   .pp-item .pp-rename:hover { color: var(--accent); }
   .pp-item .pp-delete:hover { color: var(--red); }
   .pp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+  /* Milestone add-form: name + date + project + button, wraps on narrow screens */
+  .ms-add { flex-wrap: wrap; }
+  .ms-add input[type="date"], .ms-add select {
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  .ms-add input[type="date"]:focus, .ms-add select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .pp-item .pp-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
   /* Priority badges (colour tags) */
   .prio {
@@ -473,6 +481,22 @@
   .gantt-undated-chip.doing { border-left-color: var(--amber); }
   .gantt-undated-chip.done  { border-left-color: var(--green); }
 
+  /* Milestones on the Gantt: a diamond marker + upright label */
+  .gantt-group-ms { margin-top: 4px; }
+  .gantt-ms-row { min-height: 30px; }
+  .gantt-diamond { position: absolute; top: 8px; height: 18px; display: flex; align-items: center; }
+  /* The diamond itself is a 45°-rotated square drawn as a pseudo-element so the
+     label beside it stays upright. Outlined = upcoming, filled = reached/passed. */
+  .gantt-diamond::before {
+    content: ""; width: 12px; height: 12px; transform: rotate(45deg); flex-shrink: 0;
+    background: var(--card); border: 2px solid var(--accent); margin-left: -6px;
+  }
+  .gantt-diamond.reached::before { background: var(--accent); }
+  .gantt-diamond-label {
+    font-size: 11px; color: var(--ink); white-space: nowrap; margin-left: 6px;
+    text-shadow: 0 0 3px var(--card), 0 0 3px var(--card);   /* keep legible over gridlines/today-line */
+  }
+
   /* Calendar */
   .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .cal-bar .cal-title { font-size: 17px; font-weight: 600; min-width: 170px; }
@@ -575,6 +599,7 @@
       </div>
       <div class="header-actions">
         <button type="button" class="btn-ghost" id="projectsBtn" title="Manage projects">📁 Projects</button>
+        <button type="button" class="btn-ghost" id="milestonesBtn" title="Manage milestones">◆ Milestones</button>
         <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙 Dark</button>
         <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">⬇ Export</button>
         <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">⬆ Import</button>
@@ -596,6 +621,23 @@
         <button type="submit" class="btn">Add</button>
       </form>
       <ul class="pp-list" id="projectList"></ul>
+    </section>
+
+    <!-- Milestones management panel (collapsible). Reuses the .projects-panel / .pp-* styling. -->
+    <section class="projects-panel" id="milestonesPanel" hidden>
+      <div class="pp-head">
+        <h2>Milestones</h2>
+        <button type="button" class="pp-close" id="milestonesClose" aria-label="Close milestones panel">✕</button>
+      </div>
+      <form class="pp-add ms-add" id="milestoneAddForm">
+        <input type="text" id="milestoneNameInput" placeholder="Milestone name…" aria-label="Milestone name" />
+        <input type="date" id="milestoneDateInput" title="Milestone date" aria-label="Milestone date" />
+        <select id="milestoneProjectInput" title="Project" aria-label="Project">
+          <option value="">No project</option>
+        </select>
+        <button type="submit" class="btn">Add</button>
+      </form>
+      <ul class="pp-list" id="milestoneList"></ul>
     </section>
 
     <!-- View switcher: List works now; others are stubbed for later -->
@@ -736,6 +778,7 @@
 
 const STORE_KEY = "projectTracker.tasks.v1";
 const PROJECTS_KEY = "projectTracker.projects.v1";   // projects stored separately from tasks
+const MILESTONES_KEY = "projectTracker.milestones.v1";   // milestones: their own object type (Gantt)
 const THEME_KEY = "projectTracker.theme";   // stores "light" | "dark" (absent = follow system)
 
 // --- Theme (dark mode) ---
@@ -826,6 +869,7 @@ function addDraftSubtask() {
 // --- State ---
 let tasks = load();
 let projects = loadProjects();
+let milestones = loadMilestones();   // separate object type; rendered on the Gantt timeline
 let projectFilter = "all";   // "all" = every project; otherwise a project id (or "none")
 let currentView = "list";
 let editingId = null;   // null = form is in "add" mode; otherwise the id being edited
@@ -888,6 +932,20 @@ function normalizeProject(p) {
     created: p && typeof p.created === "number" ? p.created : Date.now(),
   };
 }
+// Milestones are their own object type (a single dated moment), mirroring the
+// projects pattern. dependsOn is an array of task IDs this milestone depends on —
+// INERT FOR NOW: stored + migrated but no logic acts on it yet (forward hook for
+// future task→milestone dependencies). Coerce a non-array to [].
+function normalizeMilestone(m) {
+  return {
+    id: m && m.id ? m.id : uid(),
+    name: m && typeof m.name === "string" ? m.name : "Untitled milestone",
+    date: m && typeof m.date === "string" ? m.date : "",   // "YYYY-MM-DD"; "" = undated
+    projectId: m && typeof m.projectId === "string" ? m.projectId : "",
+    dependsOn: Array.isArray(m && m.dependsOn) ? m.dependsOn.filter(id => typeof id === "string") : [],
+    created: m && typeof m.created === "number" ? m.created : Date.now(),
+  };
+}
 function save() {
   localStorage.setItem(STORE_KEY, JSON.stringify(tasks));
 }
@@ -903,6 +961,19 @@ function loadProjects() {
 }
 function saveProjects() {
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+}
+function loadMilestones() {
+  try {
+    const raw = localStorage.getItem(MILESTONES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeMilestone) : [];
+  } catch (e) {
+    console.warn("Could not load milestones:", e);
+    return [];
+  }
+}
+function saveMilestones() {
+  localStorage.setItem(MILESTONES_KEY, JSON.stringify(milestones));
 }
 // Look up a project's name by id; "" or unknown id → null (treated as "No project").
 function projectName(id) {
@@ -1092,12 +1163,49 @@ function deleteProject(id) {
   tasks.forEach(t => {
     if (t.projectId === id) { t.projectId = ""; reassigned++; }
   });
+  // Same referential-integrity rule for milestones: don't orphan them pointing at
+  // a dead projectId — reassign to "" (no project), mirroring the task handling.
+  milestones.forEach(m => {
+    if (m.projectId === id) { m.projectId = ""; reassigned++; }
+  });
   projects = projects.filter(p => p.id !== id);
   if (projectFilter === id) projectFilter = "all";   // don't get stuck filtering a deleted project
   save();
   saveProjects();
+  saveMilestones();
   render();
-  return reassigned;
+  return reassigned;   // total items (tasks + milestones) reassigned
+}
+
+// --- Milestone CRUD (mirrors project CRUD) ---
+// A milestone needs a name and a date. projectId optional. dependsOn starts [].
+function addMilestone(name, date, projectId) {
+  const clean = (name || "").trim();
+  if (!clean || !date) return null;   // both name and date are required
+  const m = { id: uid(), name: clean, date: date, projectId: projectId || "", dependsOn: [], created: Date.now() };
+  milestones.push(m);
+  saveMilestones();
+  return m;
+}
+function renameMilestone(id, name) {
+  const m = milestones.find(m => m.id === id);
+  const clean = (name || "").trim();
+  if (!m || !clean) return;
+  m.name = clean;
+  saveMilestones();
+  render();
+}
+function setMilestoneDate(id, date) {
+  const m = milestones.find(m => m.id === id);
+  if (!m || !date) return;
+  m.date = date;
+  saveMilestones();
+  render();
+}
+function deleteMilestone(id) {
+  milestones = milestones.filter(m => m.id !== id);
+  saveMilestones();
+  render();
 }
 
 // --- Export / Import (data portability) ---
@@ -1110,6 +1218,7 @@ function exportTasks() {
     exportedAt: new Date().toISOString(),
     tasks: tasks,
     projects: projects,
+    milestones: milestones,
   };
   const json = JSON.stringify(payload, null, 2);
   // A Blob is an in-memory file; URL.createObjectURL gives it a temporary URL
@@ -1151,7 +1260,13 @@ function parseImport(text) {
   const cleanedProjects = rawProjects
     .filter(p => p && typeof p === "object" && typeof p.name === "string" && p.name.trim())
     .map(normalizeProject);
-  return { tasks: cleanedTasks, projects: cleanedProjects };
+  // Milestones also optional (backups predating the Gantt feature won't have them).
+  // Keep only those with a name and a date.
+  const rawMilestones = (data && Array.isArray(data.milestones)) ? data.milestones : [];
+  const cleanedMilestones = rawMilestones
+    .filter(m => m && typeof m === "object" && typeof m.name === "string" && m.name.trim() && typeof m.date === "string" && m.date)
+    .map(normalizeMilestone);
+  return { tasks: cleanedTasks, projects: cleanedProjects, milestones: cleanedMilestones };
 }
 
 // Import: read the chosen file, validate, and let the user replace or merge.
@@ -1165,18 +1280,21 @@ function importTasks(file) {
       alert("Import failed: " + e.message);
       return;
     }
-    const projMsg = incoming.projects.length ? ` and ${incoming.projects.length} project(s)` : "";
+    const projMsg = incoming.projects.length ? `, ${incoming.projects.length} project(s)` : "";
+    const msMsg = incoming.milestones.length ? `, ${incoming.milestones.length} milestone(s)` : "";
     const replace = confirm(
-      `Found ${incoming.tasks.length} task(s)${projMsg} in the file.\n\n` +
+      `Found ${incoming.tasks.length} task(s)${projMsg}${msMsg} in the file.\n\n` +
       `OK = REPLACE all current data with the file.\n` +
       `Cancel = MERGE the file's data into your current list.`
     );
     if (replace) {
       tasks = incoming.tasks;
       projects = incoming.projects;
+      milestones = incoming.milestones;
     } else {
       // Merge: avoid duplicate ids by giving incoming items fresh ids if they collide.
-      // When a project id is remapped, keep tasks pointing at it by rewriting their projectId.
+      // When a project id is remapped, rewrite the projectId on BOTH the tasks and
+      // milestones that pointed at it, so their project links survive the merge.
       const existingProjIds = new Set(projects.map(p => p.id));
       const projRemap = {};
       incoming.projects.forEach(p => {
@@ -1189,8 +1307,15 @@ function importTasks(file) {
         if (existingIds.has(t.id)) t.id = uid();
         tasks.push(t);
       });
+      const existingMsIds = new Set(milestones.map(m => m.id));
+      incoming.milestones.forEach(m => {
+        if (m.projectId && projRemap[m.projectId]) m.projectId = projRemap[m.projectId];
+        if (existingMsIds.has(m.id)) m.id = uid();
+        milestones.push(m);
+      });
     }
     saveProjects();
+    saveMilestones();
     save();
     render();
   };
@@ -1764,6 +1889,69 @@ function renderProjectsPanel() {
   });
 }
 
+// Render the milestones management panel (mirrors renderProjectsPanel).
+function renderMilestonesPanel() {
+  const listEl = document.getElementById("milestoneList");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  if (milestones.length === 0) {
+    const li = document.createElement("li");
+    li.className = "pp-empty";
+    li.textContent = "No milestones yet. Add one above to mark a key date on the timeline.";
+    listEl.appendChild(li);
+    return;
+  }
+  // Sort chronologically by date (ISO strings sort correctly as plain strings).
+  milestones.slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(m => {
+    const li = document.createElement("li");
+    li.className = "pp-item";
+
+    const name = document.createElement("span");
+    name.className = "pp-name";
+    name.textContent = m.name;          // safe text
+
+    const meta = document.createElement("span");
+    meta.className = "pp-meta";
+    const proj = projectName(m.projectId);
+    meta.textContent = (m.date ? fmtDate(m.date) : "no date") + (proj ? " · " + proj : "");
+
+    const rename = document.createElement("button");
+    rename.className = "pp-rename";
+    rename.type = "button";
+    rename.textContent = "Rename";
+    rename.addEventListener("click", () => {
+      const next = prompt("Rename milestone:", m.name);
+      if (next !== null) renameMilestone(m.id, next);
+    });
+
+    const del = document.createElement("button");
+    del.className = "pp-delete";
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (confirm(`Delete milestone "${m.name}"?`)) deleteMilestone(m.id);
+    });
+
+    li.append(name, meta, rename, del);
+    listEl.appendChild(li);
+  });
+}
+
+// Build the milestone panel's project <select>, keeping the current selection.
+function renderMilestoneProjectOptions() {
+  const sel = document.getElementById("milestoneProjectInput");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">No project</option>';
+  projects.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  sel.value = projects.some(p => p.id === current) ? current : "";
+}
+
 // Build the form's project <select> (No project + each project), keeping the
 // current selection if it still exists.
 function renderProjectFormOptions() {
@@ -1825,14 +2013,17 @@ function renderGantt() {
   const wrap = document.getElementById("ganttWrap");
   wrap.innerHTML = "";
 
-  // Respect the global project filter, like the other views.
+  // Respect the global project filter, like the other views (works for both
+  // tasks and milestones since both carry a projectId).
   const visibleTasks = tasks.filter(matchesProjectFilter);
-  const milestones = [];   // none yet — milestone data model lands in Phase 5
+  // Only dated milestones can sit on the timeline. (Diamonds render in Phase 8;
+  // including them here means the axis already reaches their dates.)
+  const visibleMilestones = milestones.filter(m => m.date && matchesProjectFilter(m));
 
   const dated = visibleTasks.filter(t => t.start || t.due);
   const undated = visibleTasks.filter(t => !t.start && !t.due);
 
-  const range = timelineRange(visibleTasks, milestones);
+  const range = timelineRange(visibleTasks, visibleMilestones);
   if (!range) {
     const empty = document.createElement("div");
     empty.className = "empty";
@@ -1930,6 +2121,52 @@ function renderGantt() {
     });
   });
 
+  // --- Milestone rows: a diamond per milestone, positioned by the SAME scale ---
+  if (visibleMilestones.length) {
+    const msHead = document.createElement("div");
+    msHead.className = "gantt-group gantt-group-ms";
+    msHead.textContent = "Milestones";
+    inner.appendChild(msHead);
+
+    // Sort chronologically; track same-date counts so collisions can be nudged apart.
+    const sorted = visibleMilestones.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const dateSeen = {};
+    sorted.forEach(m => {
+      const row = document.createElement("div");
+      row.className = "gantt-row gantt-ms-row";
+
+      const label = document.createElement("div");
+      label.className = "gantt-row-label";
+      label.textContent = m.name;             // safe text
+      label.title = m.name;
+      row.appendChild(label);
+
+      const track = document.createElement("div");
+      track.className = "gantt-track";
+      track.style.width = chartWidth + "px";
+
+      const reached = m.date < today;   // a past date = milestone reached/passed
+      const marker = document.createElement("div");
+      marker.className = "gantt-diamond" + (reached ? " reached" : "");
+      const x = dateToX(m.date, rangeStart, GANTT_PX_PER_DAY);
+      marker.style.left = x + "px";
+      // Same-date collision: nudge each subsequent diamond on that date downward a touch.
+      const n = dateSeen[m.date] || 0;
+      if (n > 0) marker.style.top = (8 + n * 4) + "px";
+      dateSeen[m.date] = n + 1;
+      marker.title = `${m.name} — ${fmtDate(m.date)}${reached ? " (passed)" : ""}`;
+
+      const mlabel = document.createElement("span");
+      mlabel.className = "gantt-diamond-label";
+      mlabel.textContent = m.name;            // safe text, sits to the right of the diamond
+      marker.appendChild(mlabel);
+
+      track.appendChild(marker);
+      row.appendChild(track);
+      inner.appendChild(row);
+    });
+  }
+
   scroller.appendChild(inner);
   wrap.appendChild(scroller);
 
@@ -1975,6 +2212,8 @@ function syncProjectControls() {
   renderProjectsPanel();
   renderProjectFormOptions();
   renderProjectFilterOptions();
+  renderMilestonesPanel();
+  renderMilestoneProjectOptions();
 }
 // Reflect the shared activeChips state onto both the List and Kanban chips,
 // so toggling a chip in one view shows as active in the other.
@@ -2142,6 +2381,41 @@ document.getElementById("projectAddForm").addEventListener("submit", e => {
     render();            // refresh panel + all project dropdowns
     input.focus();
   }
+});
+
+// Milestones panel open/close + add (mirrors the projects panel)
+document.getElementById("milestonesBtn").addEventListener("click", () => {
+  const panel = document.getElementById("milestonesPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) {
+    document.getElementById("projectsPanel").hidden = true;   // only one panel open at a time
+    renderMilestonesPanel();
+    renderMilestoneProjectOptions();
+    document.getElementById("milestoneNameInput").focus();
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+});
+document.getElementById("milestonesClose").addEventListener("click", () => {
+  document.getElementById("milestonesPanel").hidden = true;
+});
+document.getElementById("milestoneAddForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const nameEl = document.getElementById("milestoneNameInput");
+  const dateEl = document.getElementById("milestoneDateInput");
+  const projEl = document.getElementById("milestoneProjectInput");
+  // addMilestone requires both name and date; if missing, focus the empty one.
+  if (!nameEl.value.trim()) { nameEl.focus(); return; }
+  if (!dateEl.value) { dateEl.focus(); return; }
+  if (addMilestone(nameEl.value, dateEl.value, projEl.value)) {
+    nameEl.value = ""; dateEl.value = ""; projEl.value = "";
+    render();
+    nameEl.focus();
+  }
+});
+
+// Symmetry: opening Projects closes the Milestones panel
+document.getElementById("projectsBtn").addEventListener("click", () => {
+  document.getElementById("milestonesPanel").hidden = true;
 });
 
 // Dark mode toggle
