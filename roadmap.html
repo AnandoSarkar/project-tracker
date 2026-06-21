@@ -218,22 +218,16 @@ const ROADMAP = {
     note: "stretch goals",
     items: [
       {
-        t: "Gantt-style timeline",
+        t: "Gantt timeline + milestones",
         learn: "Computed layout from data",
         effort: "Large",
-        d: "Horizontal bars spanning each task's start→due across a date axis. The most involved view: you calculate bar position and width from dates. Teaches translating data into precise pixel layout — a big step up."
+        d: "Horizontal bars spanning each task's start→due across a date axis, plus milestones as diamond markers on key dates. The most involved view: you calculate bar/diamond position from dates (data → pixels). Groundwork already shipped: tasks have an optional 'start' field (form input + migration, currently inert). Milestones are designed as a separate object mirroring projects, with an inert 'dependsOn' hook (task IDs a milestone depends on) reserved for future dependency logic. Planned as a 10-phase build: scale math + tests → enable tab → render task bars → verify → milestone data model → milestone UI → project↔milestone integrity + export/import → render diamonds → mobile pass → final verify/docs. Key order: math before rendering, bars before diamonds (shared scale)."
       },
       {
         t: "Cloud sync (accounts + database)",
         learn: "Backend, auth & APIs",
         effort: "Large",
         d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
-      },
-      {
-        t: "Recurring tasks",
-        learn: "Date arithmetic + generated instances",
-        effort: "Large",
-        d: "Tasks that repeat daily/weekly/monthly, auto-creating the next occurrence when one is completed. Teaches recurrence rules and date math (next due date), plus the tricky question of how to represent a repeating series vs. its individual instances."
       }
     ]
   }

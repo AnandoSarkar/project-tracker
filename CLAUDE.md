@@ -47,6 +47,7 @@ A simple **project/task tracker web app**, built as a learning project to practi
 {
   id: string,            // unique, from uid()
   title: string,
+  start: "YYYY-MM-DD" | "",  // optional start date; "" when unset. Groundwork for the Gantt timeline.
   due: "YYYY-MM-DD" | "",
   status: "todo" | "doing" | "done",
   priority: "none" | "low" | "med" | "high",
@@ -65,6 +66,25 @@ A simple **project/task tracker web app**, built as a learning project to practi
 {
   id: string,            // unique, from uid()
   name: string,
+  created: number        // Date.now() timestamp
+}
+```
+
+## Milestone data shape (planned — not built yet)
+
+Part of the upcoming Gantt + milestones feature (roadmap "Later"). Milestones are a
+separate object type, mirroring the projects pattern (own array + storage key +
+`normalizeMilestone`). Documented here so the shape is fixed before coding.
+
+```js
+{
+  id: string,            // unique, from uid()
+  name: string,
+  date: "YYYY-MM-DD",    // the single moment (required — unlike task dates)
+  projectId: string,     // id of the owning project, or "" for none
+  dependsOn: [],         // optional array of task IDs this milestone depends on.
+                         // INERT FOR NOW: stored + migrated, but no logic acts on it yet.
+                         // A forward hook for future task→milestone dependencies.
   created: number        // Date.now() timestamp
 }
 ```
@@ -94,9 +114,10 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 ## Roadmap status (keep in sync with roadmap.html)
 
-- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view), project grouping (projects as separate objects, projectId on tasks, management panel, global filter across views + grouped List headings), Kanban filters (project picker + Overdue/High chips sharing state with List), subtasks/checklists (nested array per task, form editor + interactive panel, derived progress badge).
+- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view), project grouping (projects as separate objects, projectId on tasks, management panel, global filter across views + grouped List headings), Kanban filters (project picker + Overdue/High chips sharing state with List), subtasks/checklists (nested array per task, form editor + interactive panel, derived progress badge), start-date field (optional `start` on tasks — inert groundwork for the Gantt timeline; form input + migration only, nothing renders it yet).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** Gantt timeline, cloud sync (accounts + DB), recurring tasks.
+- **Later:** Gantt timeline + milestones, cloud sync (accounts + DB).
+  - **Gantt + milestones** is designed and planned as a 10-phase build (see the in-session task list / planning notes): (1) scale math `daysBetween`/`dateToX`/`timelineRange` + Node tests; (2) enable Gantt tab + router; (3) render task bars (start→due, project grouping, scroll sync, undated handling); (4) verify bars live; (5) milestone data model — separate object mirroring projects (`MILESTONES_KEY`, `normalizeMilestone`), incl. the inert `dependsOn` hook; (6) milestone management UI; (7) project↔milestone integrity + export/import; (8) render milestone diamonds (reuse `dateToX`); (9) mobile/responsive pass; (10) final verify + docs + roadmap. Key sequencing: math before rendering, bars before diamonds (shared scale), data-integrity before visuals. The `start` field (shipped) and milestone shape with `dependsOn` (documented above) are the groundwork already in place.
 
 ## Gotchas
 

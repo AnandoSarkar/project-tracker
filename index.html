@@ -107,7 +107,7 @@
     padding: 14px;
     box-shadow: var(--shadow);
     display: grid;
-    grid-template-columns: 1fr 140px 120px 110px auto;
+    grid-template-columns: 1fr 130px 130px 120px 110px auto;
     gap: 10px;
     margin-bottom: 20px;
   }
@@ -563,6 +563,7 @@
     <!-- SHARED add/edit form (used by every view) -->
     <form class="add-form" id="addForm">
       <input type="text" id="titleInput" placeholder="New task…" required />
+      <input type="date" id="startInput" title="Start date (optional — used by the timeline)" aria-label="Start date" />
       <input type="date" id="dueInput" title="Due date" />
       <select id="statusInput" title="Status">
         <option value="todo">To Do</option>
@@ -797,6 +798,7 @@ function normalizeTask(t) {
   return {
     id: t.id || uid(),
     title: typeof t.title === "string" ? t.title : "",
+    start: typeof t.start === "string" ? t.start : "",   // groundwork for Gantt; "" = no start. Old tasks default to "".
     due: t.due || "",
     status: ["todo", "doing", "done"].includes(t.status) ? t.status : "todo",
     priority: ["none", "low", "med", "high"].includes(t.priority) ? t.priority : "none",
@@ -891,10 +893,11 @@ function ymd(year, month, day) {
 }
 
 // --- CRUD ---
-function addTask(title, due, status, priority, notes, projectId, subtasks) {
+function addTask(title, due, status, priority, notes, projectId, subtasks, start) {
   tasks.push({
     id: uid(),
     title: title.trim(),
+    start: start || "",
     due: due || "",
     status: status || "todo",
     priority: priority || "none",
@@ -1721,6 +1724,7 @@ function startEdit(id) {
   editingId = id;
   // Pre-fill the form with this task's current values
   document.getElementById("titleInput").value = t.title;
+  document.getElementById("startInput").value = t.start || "";
   document.getElementById("dueInput").value = t.due;
   document.getElementById("statusInput").value = t.status;
   document.getElementById("priorityInput").value = t.priority || "none";
@@ -1756,6 +1760,7 @@ function cancelEdit() {
 document.getElementById("addForm").addEventListener("submit", e => {
   e.preventDefault();
   const title = document.getElementById("titleInput").value;
+  const start = document.getElementById("startInput").value;
   const due = document.getElementById("dueInput").value;
   const status = document.getElementById("statusInput").value;
   const priority = document.getElementById("priorityInput").value;
@@ -1765,11 +1770,11 @@ document.getElementById("addForm").addEventListener("submit", e => {
 
   if (editingId) {
     // Edit mode: update the existing task (draftSubtasks holds the edited checklist)
-    updateTask(editingId, { title: title.trim(), due: due || "", status, priority, projectId, notes: notes.trim(), subtasks: normalizeSubtasks(draftSubtasks) });
+    updateTask(editingId, { title: title.trim(), start: start || "", due: due || "", status, priority, projectId, notes: notes.trim(), subtasks: normalizeSubtasks(draftSubtasks) });
     cancelEdit();
   } else {
     // Add mode: create a new task
-    addTask(title, due, status, priority, notes, projectId, draftSubtasks);
+    addTask(title, due, status, priority, notes, projectId, draftSubtasks, start);
     e.target.reset();
     draftSubtasks = [];
     renderDraftSubtasks();
