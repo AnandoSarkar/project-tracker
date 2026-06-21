@@ -211,6 +211,12 @@ const ROADMAP = {
         learn: "Computed layout from data (data → pixels)",
         ship: "Shipped",
         d: "Done ✅ — the most involved view: a horizontal timeline where each task is a bar (start→due) and each milestone is a diamond, positioned by calculating pixels from dates. Built in 10 verified phases. The core lesson is COORDINATE MAPPING — a pure dateToX(date, rangeStart, pxPerDay) scale (plus daysBetween in UTC so DST can't shift the day count, and timelineRange to derive the axis extent) turns data into a pixel layout, the foundation under every charting library. Milestones are a separate object type (MILESTONES_KEY) mirroring projects, with an inert dependsOn hook for future dependencies; deleting a project reassigns its milestones too, and export/import carry them. Bars were built before diamonds so both could share one scale. Edge cases handled: undated tasks (listed separately), start-after-due (clamped), single-day bars (min width), same-date diamonds (nudged), reached vs upcoming styling, and a desktop-first layout that shrinks the label column on phones. Verified with ~60 Node tests across the phases + live."
+      },
+      {
+        t: "Cloud sync (accounts + database)",
+        learn: "Backend, auth & APIs — the full-stack leap",
+        ship: "Shipped",
+        d: "Done ✅ — the graduation. Storage moved from the browser to Supabase (Postgres + Auth) behind an email/password login, so tasks follow you across devices. The single file became a small multi-file project (js/store.js = the persistence seam, js/cloud.js = Supabase client + auth, js/config.js = public keys) — still no build step. Built in phases: provision project + schema + Row-Level Security (each user sees only their own rows — the real security boundary, which is why the public key is safe to ship); extract the data seam; add the client; auth UI; route reads/writes to the cloud when logged in (per-row upserts keyed on the app's id stored in client_id, so nothing in the app learns about uuids); a first-login prompt to upload local data; and a service-worker update banner + offline awareness. Cloud-as-source-of-truth when logged in, localStorage when not (and as an offline cache). Hard lesson: a migration race could wipe local data — fixed with a guard + never overwriting a non-empty local cache with an empty cloud. Verified end-to-end against the live database (data round-trip, RLS isolation, full migration with links + subtasks intact)."
       }
     ]
   },
@@ -219,9 +225,9 @@ const ROADMAP = {
     note: "next steps",
     items: [
       {
-        t: "All caught up! 🎉",
-        learn: "Pick your next stretch goal from Later",
-        d: "Every planned 'Now' feature has shipped. Browse the Later column and pull whatever looks fun next — task notes is the smallest, cloud sync is the biggest leap."
+        t: "Roadmap complete! 🎉",
+        learn: "Every planned feature has shipped",
+        d: "From a single-file localStorage task list to a multi-view, installable PWA with cloud sync across devices. Everything on the roadmap is Done. Future ideas if the itch returns: real-time multi-device updates (Supabase subscriptions), offline-first write queue, task↔milestone dependencies (the dependsOn hook is already in place), or sharing/collaboration."
       }
     ]
   },
@@ -230,10 +236,9 @@ const ROADMAP = {
     note: "stretch goals",
     items: [
       {
-        t: "Cloud sync (accounts + database)",
-        learn: "Backend, auth & APIs",
-        effort: "Large",
-        d: "Move storage from the browser to a service like Supabase so tasks follow you across devices, behind a login. The leap from front-end-only to full-stack. This is also the natural moment to graduate from a single file to a real project setup."
+        t: "Nothing queued",
+        learn: "The backlog is clear",
+        d: "All planned stretch goals have shipped. New ideas can land here whenever inspiration strikes."
       }
     ]
   }
