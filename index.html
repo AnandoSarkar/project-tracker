@@ -158,10 +158,9 @@
   /* Mobile "+ Add task" toggle — hidden on desktop, where the form is always shown */
   .add-toggle {
     display: none;
-    width: 100%;
     align-items: center; gap: 8px;
     background: var(--accent); color: #fff; border: none; border-radius: 8px;
-    padding: 12px 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+    padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
     margin-bottom: 12px;
   }
   .add-toggle .add-toggle-icon { font-size: 20px; line-height: 1; }
@@ -213,14 +212,18 @@
   .prio-dot-high { background: var(--red); }
   .prio-dot-med  { background: var(--amber); }
   .prio-dot-low  { background: var(--accent); }
+  /* The add-task form is collapsed by default at ALL widths — the task list is
+     what you see first. The "+ Add task" toggle reveals it (body.form-open), and
+     editing a task forces it open. (Originally mobile-only; now applies everywhere
+     since the form grew tall with dates/project/notes/checklist.) */
+  .add-toggle { display: flex; }
+  .add-form { display: none; }
+  body.form-open .add-form { display: grid; }
+
   @media (max-width: 640px) {
     .add-form { grid-template-columns: 1fr 1fr; }
     .add-form input:first-child { grid-column: 1 / -1; }
-    /* On mobile the toggle appears and the form is collapsed until opened.
-       body.form-open reveals it. While editing a task we always force it open. */
-    .add-toggle { display: flex; }
-    .add-form { display: none; }
-    body.form-open .add-form { display: grid; }
+    .add-toggle { width: 100%; }   /* full-width tap target on phones */
   }
 
   /* Filter / sort bar */
@@ -587,6 +590,19 @@
     .cal-task { font-size: 10px; }
   }
 
+  /* Gantt is a desktop-first, horizontally-scrolling view. On a phone the fixed
+     label column was eating ~40% of the width, so shrink it (the CSS variable
+     drives the axis + today-line offsets too, so they stay aligned) and tighten
+     fonts. The chart still scrolls sideways — that's expected for a timeline. */
+  @media (max-width: 640px) {
+    .gantt-inner { --gantt-label-w: 104px; }
+    .gantt-row-label { font-size: 12px; padding: 0 6px; }
+    .gantt-tick { font-size: 10px; }
+    .gantt-hint { display: block; }
+  }
+  /* Scroll hint, shown only on mobile (hidden on desktop where it's obvious) */
+  .gantt-hint { display: none; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
 </style>
 </head>
@@ -763,6 +779,7 @@
 
     <!-- GANTT VIEW -->
     <section id="view-gantt" style="display:none">
+      <p class="gantt-hint">Scroll sideways to see the full timeline. 👉</p>
       <div class="gantt" id="ganttWrap"></div>
     </section>
   </div>

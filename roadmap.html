@@ -199,6 +199,18 @@ const ROADMAP = {
         learn: "Nested arrays + derived progress",
         ship: "Shipped",
         d: "Done ✅ — each task can hold a checklist of {id, text, done} items. You add items in the add/edit form (a working draftSubtasks array, committed on Save) and tick them off in the List detail panel; cards show a derived progress badge like '☑ 2/5' that turns green when complete. Two lessons: storing an array INSIDE each task (a nested migration, normalizeSubtasks, defaulting old tasks to []), and DERIVED state — progress is computed from the children every render via subtaskProgress(), never stored, so it can't drift. A subtlety: ticking an item re-renders the list, so an openDetailIds Set preserves which panels stay expanded. Verified with 14 Node tests + live."
+      },
+      {
+        t: "Collapsible add-task form",
+        learn: "Reusing a mechanism across breakpoints",
+        ship: "Shipped",
+        d: "Done ✅ — the add-task form (which had grown tall with start/due dates, project, notes, and a checklist editor) is now collapsed by default at ALL screen sizes behind a '+ Add task' toggle, so the task list is what you see first. Almost free: the collapse mechanism (formOpen state, edit-forces-open, collapse-after-add) already existed from the mobile redesign — it was just fenced behind the 640px breakpoint, so the fix was moving three CSS rules out to apply globally."
+      },
+      {
+        t: "Gantt timeline + milestones",
+        learn: "Computed layout from data (data → pixels)",
+        ship: "Shipped",
+        d: "Done ✅ — the most involved view: a horizontal timeline where each task is a bar (start→due) and each milestone is a diamond, positioned by calculating pixels from dates. Built in 10 verified phases. The core lesson is COORDINATE MAPPING — a pure dateToX(date, rangeStart, pxPerDay) scale (plus daysBetween in UTC so DST can't shift the day count, and timelineRange to derive the axis extent) turns data into a pixel layout, the foundation under every charting library. Milestones are a separate object type (MILESTONES_KEY) mirroring projects, with an inert dependsOn hook for future dependencies; deleting a project reassigns its milestones too, and export/import carry them. Bars were built before diamonds so both could share one scale. Edge cases handled: undated tasks (listed separately), start-after-due (clamped), single-day bars (min width), same-date diamonds (nudged), reached vs upcoming styling, and a desktop-first layout that shrinks the label column on phones. Verified with ~60 Node tests across the phases + live."
       }
     ]
   },
@@ -217,12 +229,6 @@ const ROADMAP = {
     title: "Later",
     note: "stretch goals",
     items: [
-      {
-        t: "Gantt timeline + milestones",
-        learn: "Computed layout from data",
-        effort: "Large",
-        d: "Horizontal bars spanning each task's start→due across a date axis, plus milestones as diamond markers on key dates. The most involved view: you calculate bar/diamond position from dates (data → pixels). Groundwork already shipped: tasks have an optional 'start' field (form input + migration, currently inert). Milestones are designed as a separate object mirroring projects, with an inert 'dependsOn' hook (task IDs a milestone depends on) reserved for future dependency logic. Planned as a 10-phase build: scale math + tests → enable tab → render task bars → verify → milestone data model → milestone UI → project↔milestone integrity + export/import → render diamonds → mobile pass → final verify/docs. Key order: math before rendering, bars before diamonds (shared scale)."
-      },
       {
         t: "Cloud sync (accounts + database)",
         learn: "Backend, auth & APIs",

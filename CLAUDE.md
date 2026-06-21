@@ -32,14 +32,17 @@ A simple **project/task tracker web app**, built as a learning project to practi
 
 ## How the app is architected
 
-- **View switcher.** Tabs (List, Kanban, Calendar; Gantt is stubbed/disabled). A `VIEWS` object maps a view name to its render function, and `render()` dispatches to the active one. **Adding a view = write one render function + enable its tab.** Preserve this pattern.
+- **View switcher.** Tabs (List, Kanban, Calendar, Gantt — all live). A `VIEWS` object maps a view name to its render function, and `render()` dispatches to the active one. **Adding a view = write one render function + enable its tab.** Preserve this pattern.
 - **State** lives in module-level variables: `tasks` (the data), `currentView`, `editingId`, `calCursor`, `calMode`, `searchText`, `activeChips`.
-- **Persistence.** `load()` reads/parses `localStorage`; `save()` writes it. `load()` runs every task through `normalizeTask()`. Projects live in a separate key (`PROJECTS_KEY`) via `loadProjects()`/`saveProjects()`, normalised through `normalizeProject()`.
-- **Projects (one-to-many).** Projects are their own objects; a task references one via `projectId` (`""` = none). Deleting a project reassigns its tasks to `""` rather than orphaning them. A global `projectFilter` narrows every view; List view also groups under project headings when the filter is "all". `syncProjectControls()` rebuilds the panel + both dropdowns on each render.
+- **Persistence.** `load()` reads/parses `localStorage`; `save()` writes it. `load()` runs every task through `normalizeTask()`. Projects live in a separate key (`PROJECTS_KEY`) via `loadProjects()`/`saveProjects()`, normalised through `normalizeProject()`. Milestones likewise under `MILESTONES_KEY` via `loadMilestones()`/`saveMilestones()`/`normalizeMilestone()`.
+- **Projects (one-to-many).** Projects are their own objects; a task references one via `projectId` (`""` = none). Deleting a project reassigns its tasks **and milestones** to `""` rather than orphaning them. A global `projectFilter` narrows every view; List view also groups under project headings when the filter is "all". `syncProjectControls()` rebuilds the panel + both dropdowns on each render.
 - **Subtasks (nested + derived).** Each task has a `subtasks` array of `{id, text, done}`. `normalizeSubtasks()` sanitizes it (part of `normalizeTask`). Progress (`2/5`) is **derived** via `subtaskProgress()` — never stored — so it can't drift. Edited in the form via a `draftSubtasks` working array (committed on Save); toggled live in the List detail panel. Because toggling re-renders, `openDetailIds` (a Set of task ids) preserves which panels are expanded across renders.
 - **`normalizeTask(t)`** is the backward-compatibility layer: it sets safe defaults then lets existing values win, so older/imported data gains any missing fields (e.g. `priority`). **Any new task field must be added here** so old saved data keeps working.
 - **Shared add/edit form.** One form does both create and edit, switched by `editingId` (null = add, otherwise the id being edited) — the "one form, two modes" pattern.
 - **Calendar.** Weeks start **Monday**. `mondayIndex(date)` converts JS's Sunday-based `getDay()` to Monday-based. `weekStart()`, `isWeekend()` derive from it. Month/Week/Day modes share helpers (`tasksByDate`, `taskChip`, `dayCell`) and a `calMode` dispatcher. Grid columns use `repeat(7, minmax(0, 1fr))` so a long task title clips instead of widening its column.
+- **Gantt (data → pixels).** Pure scale math, all using the `iso + "T00:00:00"` parse convention to avoid UTC drift: `daysBetween(a,b)` (whole days, computed in UTC so DST can't shift the count), `dateToX(date, rangeStart, pxPerDay)` (the date→pixel map), `timelineRange(tasks, milestones)` (min/max across all dates incl. milestones), `addDays`. Tasks render as bars (`start`→`due`, single-day marker if only one date, min-width clamp, start-after-due clamped so no negative width); undated tasks listed separately. One horizontal scroll container holds the axis + rows so they stay locked without JS scroll-sync. Desktop-first; mobile shrinks the label column via `--gantt-label-w`. **Bars before diamonds** was deliberate — both share `dateToX`.
+- **Milestones (separate object).** A `milestones` array under `MILESTONES_KEY`, with `loadMilestones`/`saveMilestones`/`normalizeMilestone` mirroring projects. Rendered as **diamonds** on the Gantt via the same `dateToX` scale (filled = past/reached, outlined = upcoming; same-date collisions nudged vertically). Managed via the ◆ Milestones panel (mirrors the Projects panel). Carried in export/import. The `dependsOn` array is migrated but **inert** (forward hook). **Any new milestone field must be added to `normalizeMilestone`.**
+- **Add-task form is collapsed by default** at all widths behind the "+ Add task" toggle (`body.form-open` reveals it); editing a task forces it open. The task list is what you see first.
 
 ## Task data shape
 
@@ -70,11 +73,11 @@ A simple **project/task tracker web app**, built as a learning project to practi
 }
 ```
 
-## Milestone data shape (planned — not built yet)
+## Milestone data shape
 
-Part of the upcoming Gantt + milestones feature (roadmap "Later"). Milestones are a
-separate object type, mirroring the projects pattern (own array + storage key +
-`normalizeMilestone`). Documented here so the shape is fixed before coding.
+A milestone is a separate object type (its own array + `MILESTONES_KEY` storage key +
+`normalizeMilestone`), mirroring the projects pattern. It marks a single dated moment on
+the Gantt timeline (rendered as a diamond), as opposed to a task's date span.
 
 ```js
 {
@@ -83,7 +86,7 @@ separate object type, mirroring the projects pattern (own array + storage key +
   date: "YYYY-MM-DD",    // the single moment (required — unlike task dates)
   projectId: string,     // id of the owning project, or "" for none
   dependsOn: [],         // optional array of task IDs this milestone depends on.
-                         // INERT FOR NOW: stored + migrated, but no logic acts on it yet.
+                         // INERT: stored + migrated, but no logic acts on it yet.
                          // A forward hook for future task→milestone dependencies.
   created: number        // Date.now() timestamp
 }
@@ -114,10 +117,9 @@ Focus tests on the **pure, breakable logic**: date math (`mondayIndex`, `weekSta
 
 ## Roadmap status (keep in sync with roadmap.html)
 
-- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view), project grouping (projects as separate objects, projectId on tasks, management panel, global filter across views + grouped List headings), Kanban filters (project picker + Overdue/High chips sharing state with List), subtasks/checklists (nested array per task, form editor + interactive panel, derived progress badge), start-date field (optional `start` on tasks — inert groundwork for the Gantt timeline; form input + migration only, nothing renders it yet).
+- **Shipped:** list view + publish, task editing, Kanban, calendar (month), calendar Month/Week/Day toggle, priority + colour tags, search & quick filters, calendar polish (Monday start / weekends / equal columns), JSON export/import, dark mode (system default + remembered manual toggle), PWA install (manifest + service worker, app-shell offline cache), mobile redesign / responsive polish (collapsible form, restructured task cards, scrollable tabs, larger tap targets — see MOBILE-REDESIGN.md), task notes (free-text field + expandable detail panel in List view), project grouping (projects as separate objects, projectId on tasks, management panel, global filter across views + grouped List headings), Kanban filters (project picker + Overdue/High chips sharing state with List), subtasks/checklists (nested array per task, form editor + interactive panel, derived progress badge), start-date field (optional `start` on tasks), collapsible add-task form (collapsed by default at all widths behind a "+ Add task" toggle), Gantt timeline + milestones (task bars from start→due via `dateToX` scale math, milestone diamonds, `MILESTONES_KEY` object mirroring projects with inert `dependsOn` hook, ◆ Milestones management panel, project filter + grouping + export/import integration, desktop-first with a mobile label-column shrink).
 - **Now:** _(nothing queued — pull the next item from Later)_
-- **Later:** Gantt timeline + milestones, cloud sync (accounts + DB).
-  - **Gantt + milestones** is designed and planned as a 10-phase build (see the in-session task list / planning notes): (1) scale math `daysBetween`/`dateToX`/`timelineRange` + Node tests; (2) enable Gantt tab + router; (3) render task bars (start→due, project grouping, scroll sync, undated handling); (4) verify bars live; (5) milestone data model — separate object mirroring projects (`MILESTONES_KEY`, `normalizeMilestone`), incl. the inert `dependsOn` hook; (6) milestone management UI; (7) project↔milestone integrity + export/import; (8) render milestone diamonds (reuse `dateToX`); (9) mobile/responsive pass; (10) final verify + docs + roadmap. Key sequencing: math before rendering, bars before diamonds (shared scale), data-integrity before visuals. The `start` field (shipped) and milestone shape with `dependsOn` (documented above) are the groundwork already in place.
+- **Later:** cloud sync (accounts + DB) — the full-stack leap; natural moment to graduate from the single file.
 
 ## Gotchas
 
