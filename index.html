@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Project Tracker</title>
+<!-- No web-font CDN: keeps the app single-file, dependency-free, and fully offline
+     (the service worker only caches local files). Uses the system font stack. -->
 <!-- PWA: manifest makes the app installable; theme-color tints the OS UI;
      apple-touch-icon is the home-screen icon on iOS (which ignores the manifest icons). -->
 <link rel="manifest" href="./manifest.webmanifest" />
@@ -12,613 +14,524 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Tracker" />
 <style>
+
+  /* ============================ TOKENS ============================ */
   :root {
-    --bg: #f4f5f7;
+    color-scheme: light;
+    --bg: #f4f5f8;
+    --bg-grad: radial-gradient(1100px 560px at 100% -8%, #e9edf7 0%, rgba(233,237,247,0) 62%);
     --card: #ffffff;
-    --ink: #172b4d;
-    --muted: #6b778c;
-    --line: #dfe1e6;
-    --accent: #0c66e4;
-    --accent-soft: #e9f2ff;
-    --green: #1f845a;
-    --amber: #b25e02;
-    --red: #ca3521;
-    --shadow: 0 1px 3px rgba(9, 30, 66, 0.13);
-    /* Hard-coded greys reused as variables so dark mode can override them too */
-    --col-bg: #ebecf0;       /* kanban columns, calendar weekday header */
-    --col-bg-2: #e3e8ef;     /* weekend weekday header */
-    --cell-weekend: #f7f8fa; /* shaded weekend day cell */
-    --cell-blank: #fafbfc;   /* blank (leading) calendar cells */
-    --cell-today: #fff8e6;   /* today highlight */
-    --col-count-bg: #d5d8df; /* kanban column count pill */
-    --prio-high-bg: #ffe2dd; --prio-med-bg: #fff0e6; --prio-low-bg: #e9f2ff;
-    --pill-done-bg: #dcfff1;
+    --surface-2: #eef0f5;
+    --surface-3: #e5e8ef;
+    --ink: #14171c;
+    --ink-soft: #39414d;
+    --muted: #69707d;
+    --faint: #99a0ad;
+    --line: #e7e9ef;
+    --line-2: #dcdfe7;
+    --line-strong: #cbd0da;
+
+    --accent: oklch(0.55 0.2 263);
+    --accent-hover: oklch(0.49 0.2 263);
+    --accent-press: oklch(0.43 0.18 263);
+    --accent-ink: oklch(0.49 0.2 263);
+    --accent-soft: oklch(0.955 0.03 263);
+    --accent-softer: oklch(0.975 0.016 263);
+    --accent-ring: oklch(0.55 0.2 263 / 0.32);
+    --on-accent: #ffffff;
+
+    --green: oklch(0.55 0.12 162);
+    --green-soft: oklch(0.95 0.045 162);
+    --amber: oklch(0.56 0.11 65);
+    --amber-soft: oklch(0.95 0.06 80);
+    --red: oklch(0.55 0.2 25);
+    --red-soft: oklch(0.95 0.05 25);
+
+    /* legacy aliases so any stray rule still resolves */
+    --col-bg: var(--surface-2); --col-bg-2: var(--surface-3);
+    --cell-weekend: #f1f3f8; --cell-blank: #f6f7fb; --cell-today: var(--accent-soft);
+    --col-count-bg: var(--surface-3);
+    --prio-high-bg: var(--red-soft); --prio-med-bg: var(--amber-soft); --prio-low-bg: var(--accent-soft);
+    --pill-done-bg: var(--green-soft);
+
+    --shadow-sm: 0 1px 2px rgba(15,18,26,0.05), 0 1px 1px rgba(15,18,26,0.03);
+    --shadow-md: 0 8px 18px -8px rgba(15,18,26,0.14), 0 2px 6px -2px rgba(15,18,26,0.06);
+    --shadow-lg: 0 22px 48px -16px rgba(15,18,26,0.26);
+
+    --r-sm: 7px; --r-md: 10px; --r-lg: 14px; --r-xl: 18px;
+    --ring: 0 0 0 3px var(--accent-ring);
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --maxw: 920px;
+
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8190' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --magnifier: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a8190' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
   }
-  /* Dark theme: same variable NAMES, dark VALUES. Because every rule below
-     already reads from these variables, the whole UI re-themes for free. */
   [data-theme="dark"] {
-    --bg: #1d2125;
-    --card: #22272b;
-    --ink: #c7d1db;
-    --muted: #8c9bab;
-    --line: #38414a;
-    --accent: #4a92f7;
-    --accent-soft: #1c2f47;
-    --green: #4bce97;
-    --amber: #e2a44a;
-    --red: #f87462;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --col-bg: #1a1d21;
-    --col-bg-2: #15191c;
-    --cell-weekend: #1a1e22;
-    --cell-blank: #1b1f23;
-    --cell-today: #36352a;
-    --col-count-bg: #38414a;
-    --prio-high-bg: #4a2723; --prio-med-bg: #43331f; --prio-low-bg: #1c2f47;
-    --pill-done-bg: #1d3d31;
+    color-scheme: dark;
+    --bg: #0b0c0f;
+    --bg-grad: radial-gradient(1100px 560px at 100% -8%, #15171f 0%, rgba(21,23,31,0) 62%);
+    --card: #16181d;
+    --surface-2: #1a1d23;
+    --surface-3: #21252c;
+    --ink: #e7e9ee;
+    --ink-soft: #c3c8d1;
+    --muted: #939aa8;
+    --faint: #6b7280;
+    --line: #24272e;
+    --line-2: #2a2e36;
+    --line-strong: #353a44;
+
+    --accent: oklch(0.68 0.16 263);
+    --accent-hover: oklch(0.73 0.16 263);
+    --accent-press: oklch(0.62 0.16 263);
+    --accent-ink: oklch(0.79 0.13 263);
+    --accent-soft: oklch(0.32 0.085 263);
+    --accent-softer: oklch(0.25 0.06 263);
+    --accent-ring: oklch(0.68 0.16 263 / 0.4);
+    --on-accent: #0b0c0f;
+
+    --green: oklch(0.74 0.13 162); --green-soft: oklch(0.32 0.06 162);
+    --amber: oklch(0.79 0.12 75); --amber-soft: oklch(0.34 0.06 70);
+    --red: oklch(0.71 0.16 25); --red-soft: oklch(0.34 0.08 25);
+
+    --cell-weekend: #131519; --cell-blank: #0f1115; --cell-today: var(--accent-soft);
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.45);
+    --shadow-md: 0 10px 24px -10px rgba(0,0,0,0.65), 0 2px 6px -2px rgba(0,0,0,0.45);
+    --shadow-lg: 0 28px 56px -18px rgba(0,0,0,0.72);
   }
+
+  /* ============================ BASE ============================ */
   * { box-sizing: border-box; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font);
     background: var(--bg);
+    background-image: var(--bg-grad);
+    background-attachment: fixed;
     color: var(--ink);
-    line-height: 1.45;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+  input, select, textarea, button { font-family: inherit; }
+
+  /* ============================ HEADER ============================ */
   header {
-    background: var(--card);
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--card) 80%, transparent);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
     border-bottom: 1px solid var(--line);
-    padding: 18px 24px;
+    padding: 14px 24px;
   }
-  header h1 { margin: 0; font-size: 20px; }
-  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-  .header-main { max-width: 820px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .header-main { max-width: var(--maxw); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; position: relative;
+    background: linear-gradient(150deg, var(--accent), var(--accent-press));
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.22);
+  }
+  .brand-mark::after {
+    content: ""; position: absolute; left: 12px; top: 9px;
+    width: 6.5px; height: 12px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+    transform: rotate(40deg); border-radius: 1px;
+  }
+  .brand-text { min-width: 0; }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  .header-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
   .btn-ghost {
-    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-    padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
+    background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    padding: 7px 12px; font-size: 13px; font-weight: 500; color: var(--ink-soft); cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
   }
-  .btn-ghost:hover { background: var(--bg); border-color: var(--accent); color: var(--accent); }
-  @media (max-width: 560px) {
-    .header-main { flex-direction: column; }
+  .btn-ghost:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+  .btn-ghost:active { background: var(--surface-3); }
+  .btn-ghost:focus-visible { outline: none; box-shadow: var(--ring); }
+  @media (max-width: 640px) {
+    header { padding: 12px 16px; }
+    .header-main { flex-direction: column; align-items: stretch; gap: 12px; }
+    .header-actions { justify-content: flex-start; }
   }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 24px; }
 
-  /* View tabs (wired up for future Kanban / Calendar / Gantt) */
-  .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 44px; }
+
+  /* ============================ TABS (segmented) ============================ */
+  .tabs {
+    display: inline-flex; gap: 2px; margin-bottom: 22px; padding: 3px; max-width: 100%;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px;
+  }
   .tab {
-    border: 1px solid var(--line);
-    background: var(--card);
-    color: var(--muted);
-    padding: 8px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
+    border: none; background: transparent; color: var(--muted);
+    padding: 7px 16px; border-radius: 8px; cursor: pointer;
+    font-size: 13.5px; font-weight: 500; white-space: nowrap;
+    transition: background .12s, color .12s, box-shadow .12s;
   }
-  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .tab[disabled] { opacity: .5; cursor: not-allowed; }
-  .tab .soon { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
+  .tab:hover { color: var(--ink); }
+  .tab.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); font-weight: 600; }
+  [data-theme="dark"] .tab.active { background: var(--surface-3); }
+  .tab[disabled] { opacity: .4; cursor: not-allowed; }
+  .tab .soon { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; margin-left: 6px; color: var(--accent-ink); }
 
-  /* Add-task form */
+  /* ============================ BUTTONS ============================ */
+  .btn {
+    background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--r-sm);
+    padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    box-shadow: var(--shadow-sm); transition: background .12s, transform .05s;
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .btn:active { background: var(--accent-press); transform: translateY(0.5px); }
+  .btn:focus-visible { outline: none; box-shadow: var(--ring); }
+  .btn-secondary {
+    background: var(--card); color: var(--ink-soft);
+    border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    padding: 9px 14px; font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  .btn-secondary:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+  .btn-secondary:focus-visible { outline: none; box-shadow: var(--ring); }
+
+  .add-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--r-md);
+    padding: 11px 18px; font-size: 14.5px; font-weight: 600; cursor: pointer;
+    margin-bottom: 16px; box-shadow: var(--shadow-sm); transition: background .12s;
+  }
+  .add-toggle:hover { background: var(--accent-hover); }
+  .add-toggle:focus-visible { outline: none; box-shadow: var(--ring); }
+  .add-toggle .add-toggle-icon { font-size: 19px; line-height: 1; font-weight: 400; }
+
+  /* ============================ ADD / EDIT FORM ============================ */
   .add-form {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 14px;
-    box-shadow: var(--shadow);
-    display: grid;
-    grid-template-columns: 1fr 130px 130px 120px 110px auto;
-    gap: 10px;
-    margin-bottom: 20px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 16px; box-shadow: var(--shadow-sm); margin-bottom: 20px;
+    display: none; grid-template-columns: 1fr 130px 130px 120px 110px auto; gap: 10px;
   }
-  .add-form input, .add-form select {
-    padding: 9px 10px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
+  body.form-open .add-form { display: grid; }
+  .add-form.editing { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-md); }
+  .add-form input, .add-form select, .notes-input,
+  .pp-add input, .ms-add input, .ms-add select, .se-add input, .checklist-add input {
+    padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    font-size: 14px; background: var(--card); color: var(--ink);
+    transition: border-color .12s, box-shadow .12s;
   }
-  .add-form input:focus, .add-form select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  /* Project select spans the full form width on its own row */
+  .add-form input::placeholder, .notes-input::placeholder, .pp-add input::placeholder,
+  .se-add input::placeholder, .checklist-add input::placeholder, .search-box::placeholder { color: var(--faint); }
+  .add-form input:focus, .add-form select:focus, .notes-input:focus,
+  .pp-add input:focus, .ms-add input:focus, .ms-add select:focus, .se-add input:focus,
+  .checklist-add input:focus, .search-box:focus, .controls select:focus, .kfilter-select:focus, .task select:focus {
+    outline: none; border-color: var(--accent); box-shadow: var(--ring);
+  }
+  .add-form select, .controls select, .kfilter-select, .ms-add select {
+    appearance: none; -webkit-appearance: none;
+    background-image: var(--chevron); background-repeat: no-repeat;
+    background-position: right 10px center; background-size: 11px; padding-right: 30px;
+  }
   #projectInput { grid-column: 1 / -1; }
-  /* Notes textarea spans the full form width on its own row */
-  .notes-input {
-    grid-column: 1 / -1;
-    padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px;
-    font-size: 14px; font-family: inherit; resize: vertical; min-height: 38px;
-    background: var(--card); color: var(--ink);
-  }
-  .notes-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  /* Checklist editor inside the add/edit form */
+  .notes-input { grid-column: 1 / -1; resize: vertical; min-height: 40px; }
   .subtasks-editor { grid-column: 1 / -1; }
   .se-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .se-list:empty { margin: 0; }
-  .se-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .se-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 10px; background: var(--surface-2); border-radius: var(--r-sm); }
   .se-item .se-text { flex: 1; word-break: break-word; }
-  .se-item .se-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; line-height: 1; }
+  .se-item .se-remove { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 13px; padding: 2px 4px; line-height: 1; }
   .se-item .se-remove:hover { color: var(--red); }
   .se-add { display: flex; gap: 8px; }
-  .se-add input {
-    flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
-    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
-  }
-  .se-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .btn {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 9px 16px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .btn:hover { filter: brightness(1.05); }
+  .se-add input { flex: 1; }
+  .form-actions { display: flex; gap: 8px; grid-column: 1 / -1; margin-top: 2px; }
+  .editing-banner { display: none; font-size: 12.5px; color: var(--accent-ink); font-weight: 500; margin: -10px 0 14px; }
+  .editing-banner.show { display: block; }
 
-  /* Mobile "+ Add task" toggle — hidden on desktop, where the form is always shown */
-  .add-toggle {
-    display: none;
-    align-items: center; gap: 8px;
-    background: var(--accent); color: #fff; border: none; border-radius: 8px;
-    padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
-    margin-bottom: 12px;
-  }
-  .add-toggle .add-toggle-icon { font-size: 20px; line-height: 1; }
-
-  /* Projects management panel */
+  /* ============================ PANELS (projects / milestones) ============================ */
   .projects-panel {
-    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-    padding: 14px 16px; margin-bottom: 20px; box-shadow: var(--shadow);
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 16px 18px; margin-bottom: 20px; box-shadow: var(--shadow-sm);
   }
-  .pp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .pp-head h2 { margin: 0; font-size: 15px; }
-  .pp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px; line-height: 1; }
-  .pp-close:hover { color: var(--red); }
-  .pp-add { display: flex; gap: 8px; margin-bottom: 12px; }
-  .pp-add input {
-    flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
-    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
-  }
-  .pp-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .pp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .pp-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
-  .pp-item .pp-name { flex: 1; font-size: 14px; word-break: break-word; }
-  .pp-item .pp-count { font-size: 12px; color: var(--muted); }
-  .pp-item button {
-    background: none; border: none; cursor: pointer; color: var(--muted);
-    font-size: 13px; font-weight: 600; padding: 4px 6px; font-family: inherit;
-  }
-  .pp-item .pp-rename:hover { color: var(--accent); }
-  .pp-item .pp-delete:hover { color: var(--red); }
-  .pp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
-  /* Milestone add-form: name + date + project + button, wraps on narrow screens */
-  .ms-add { flex-wrap: wrap; }
-  .ms-add input[type="date"], .ms-add select {
-    padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
-    font-size: 14px; font-family: inherit; background: var(--card); color: var(--ink);
-  }
-  .ms-add input[type="date"]:focus, .ms-add select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .pp-item .pp-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .pp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .pp-head h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .pp-close { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 16px; padding: 5px; line-height: 1; border-radius: 6px; }
+  .pp-close:hover { color: var(--red); background: var(--red-soft); }
+  .pp-add, .ms-add { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .pp-add input { flex: 1; min-width: 160px; }
+  .pp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .pp-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); transition: border-color .12s; }
+  .pp-item:hover { border-color: var(--line-strong); }
+  .pp-item .pp-name { flex: 1; font-size: 14px; font-weight: 500; word-break: break-word; }
+  .pp-item .pp-count, .pp-item .pp-meta { font-size: 12px; color: var(--muted); white-space: nowrap; font-family: var(--mono); }
+  .pp-item button { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 12.5px; font-weight: 500; padding: 4px 8px; border-radius: 6px; }
+  .pp-item .pp-rename:hover { color: var(--accent-ink); background: var(--accent-soft); }
+  .pp-item .pp-delete:hover { color: var(--red); background: var(--red-soft); }
+  .pp-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 
-  /* Priority badges (colour tags) */
-  .prio {
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    padding: 1px 7px; border-radius: 999px; flex-shrink: 0;
-  }
-  .prio-high { background: var(--prio-high-bg); color: var(--red); }
-  .prio-med  { background: var(--prio-med-bg); color: var(--amber); }
-  .prio-low  { background: var(--prio-low-bg); color: var(--accent); }
+  /* ============================ BADGES ============================ */
+  .prio { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 5px; flex-shrink: 0; }
+  .prio-high { background: var(--red-soft); color: var(--red); }
+  .prio-med  { background: var(--amber-soft); color: var(--amber); }
+  .prio-low  { background: var(--accent-soft); color: var(--accent-ink); }
   .prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .prio-dot-high { background: var(--red); }
   .prio-dot-med  { background: var(--amber); }
   .prio-dot-low  { background: var(--accent); }
-  /* The add-task form is collapsed by default at ALL widths — the task list is
-     what you see first. The "+ Add task" toggle reveals it (body.form-open), and
-     editing a task forces it open. (Originally mobile-only; now applies everywhere
-     since the form grew tall with dates/project/notes/checklist.) */
   .add-toggle { display: flex; }
-  .add-form { display: none; }
-  body.form-open .add-form { display: grid; }
 
   @media (max-width: 640px) {
     .add-form { grid-template-columns: 1fr 1fr; }
     .add-form input:first-child { grid-column: 1 / -1; }
-    .add-toggle { width: 100%; }   /* full-width tap target on phones */
+    .add-toggle { width: 100%; justify-content: center; }
   }
 
-  /* Filter / sort bar */
-  .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  .controls label { font-size: 13px; color: var(--muted); }
-  .controls select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; }
-  .count { margin-left: auto; font-size: 13px; color: var(--muted); }
+  /* ============================ FILTER / SEARCH BAR ============================ */
+  .controls { display: flex; gap: 10px 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .controls label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .controls select { padding: 7px 9px; border: 1px solid var(--line-2); border-radius: var(--r-sm); font-size: 13px; background: var(--card); color: var(--ink); }
+  .count { margin-left: auto; font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
 
-  /* Search box + quick-filter chips */
-  .search-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .search-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
   .search-box {
-    flex: 1; min-width: 200px;
-    padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
-    font-size: 14px; font-family: inherit;
+    flex: 1; min-width: 220px;
+    padding: 10px 12px 10px 40px;
+    border: 1px solid var(--line-2); border-radius: var(--r-md);
+    font-size: 14px; background: var(--card); color: var(--ink);
+    background-image: var(--magnifier); background-repeat: no-repeat;
+    background-position: 14px center; background-size: 16px;
   }
-  .search-box:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   .chip {
-    padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
-    background: var(--card); color: var(--muted); font-size: 13px; font-weight: 600;
-    cursor: pointer; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line-2); border-radius: 999px;
+    background: var(--card); color: var(--muted); font-size: 13px; font-weight: 500;
+    cursor: pointer; white-space: nowrap; transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
   }
-  .chip:hover { background: var(--bg); }
-  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chip:hover { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+  .chip.active { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; box-shadow: inset 0 0 0 1px var(--accent); }
 
-  /* Task cards */
+  /* ============================ TASK CARDS (List) ============================ */
   .task-list { display: flex; flex-direction: column; gap: 8px; }
-  .task {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 4px solid var(--line);
-    border-radius: 8px;
-    padding: 12px 14px;
-    box-shadow: var(--shadow);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .task.todo { border-left-color: var(--muted); }
-  .task.doing { border-left-color: var(--amber); }
-  .task.done { border-left-color: var(--green); }
-  .task input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
-  .task .body { flex: 1; min-width: 0; }
-  .task .title { font-size: 15px; font-weight: 500; word-break: break-word; }
-  .task.done .title { text-decoration: line-through; color: var(--muted); }
-  .task .meta { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .pill { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .pill.todo { background: var(--col-bg); color: var(--muted); }
-  .pill.doing { background: var(--prio-med-bg); color: var(--amber); }
-  .pill.done { background: var(--pill-done-bg); color: var(--green); }
-  .due.overdue { color: var(--red); font-weight: 600; }
-  .task select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; font-family: inherit; }
-  .del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; }
-  .del:hover { color: var(--red); }
-  .edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 4px; line-height: 1; }
-  .edit:hover { color: var(--accent); }
-
-  /* Add-form switches to "edit mode" while editing a task */
-  .add-form.editing { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-  .form-actions { display: flex; gap: 8px; grid-column: 1 / -1; }
-  .btn-secondary {
-    background: var(--card); color: var(--muted);
-    border: 1px solid var(--line); border-radius: 6px;
-    padding: 9px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
-  }
-  .btn-secondary:hover { background: var(--bg); }
-  .editing-banner {
-    display: none;
-    font-size: 12px; color: var(--accent); font-weight: 600;
-    margin: -8px 0 12px;
-  }
-  .editing-banner.show { display: block; }
-
-  .empty { text-align: center; color: var(--muted); padding: 50px 20px; border: 2px dashed var(--line); border-radius: 8px; }
-
-  /* Task notes: a 📝 toggle in the meta row + a collapsed detail panel.
-     The wrapper lets the panel sit full-width below the card (summary vs. detail). */
   .task-item { display: flex; flex-direction: column; }
-  /* Project group heading in the List view */
-  .project-heading {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted); margin: 14px 2px 4px;
+  .task {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md);
+    padding: 13px 15px; display: flex; align-items: center; gap: 13px;
+    box-shadow: var(--shadow-sm); position: relative;
+    transition: border-color .12s, box-shadow .12s;
   }
-  .project-heading:first-child { margin-top: 0; }
-  .project-heading-count {
-    background: var(--col-bg); color: var(--muted);
-    border-radius: 999px; font-size: 11px; padding: 1px 8px; letter-spacing: 0;
+  .task::before { content: ""; position: absolute; left: 0; top: 11px; bottom: 11px; width: 3px; border-radius: 0 3px 3px 0; background: var(--faint); }
+  .task.todo::before  { background: var(--muted); }
+  .task.doing::before { background: var(--amber); }
+  .task.done::before  { background: var(--green); }
+  .task:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+  .task input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+  .task .body { flex: 1; min-width: 0; }
+  .task .title { font-size: 14.5px; font-weight: 500; letter-spacing: -0.005em; word-break: break-word; color: var(--ink); }
+  .task.done .title { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
+  .task .meta { font-size: 12px; color: var(--muted); margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .task .meta .due, .kcard .kmeta .due { font-family: var(--mono); font-size: 11.5px; }
+  .due.overdue { color: var(--red); font-weight: 600; }
+  .task select {
+    appearance: none; -webkit-appearance: none;
+    padding: 5px 26px 5px 10px; border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    font-size: 12px; background: var(--card); color: var(--ink-soft); cursor: pointer;
+    background-image: var(--chevron); background-repeat: no-repeat; background-position: right 7px center; background-size: 10px;
+    transition: border-color .12s;
   }
-  .notes-toggle {
-    background: none; border: none; cursor: pointer; padding: 0;
-    font-size: 12px; font-weight: 600; color: var(--accent); font-family: inherit;
-  }
-  .notes-toggle:hover { text-decoration: underline; }
+  .task select:hover { border-color: var(--line-strong); }
+  .del, .edit { background: none; border: none; cursor: pointer; color: var(--faint); padding: 5px; line-height: 1; border-radius: 6px; transition: background .12s, color .12s; }
+  .del { font-size: 16px; } .edit { font-size: 14px; }
+  .del:hover { color: var(--red); background: var(--red-soft); }
+  .edit:hover { color: var(--accent-ink); background: var(--accent-soft); }
+
+  .pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .pill.todo  { background: var(--surface-2); color: var(--ink-soft); } .pill.todo::before  { background: var(--muted); }
+  .pill.doing { background: var(--amber-soft); color: var(--amber); }  .pill.doing::before { background: var(--amber); }
+  .pill.done  { background: var(--green-soft); color: var(--green); }  .pill.done::before  { background: var(--green); }
+
+  .empty { text-align: center; color: var(--muted); padding: 56px 24px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); background: var(--card); font-size: 14px; }
+
+  .project-heading { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 24px 2px 10px; }
+  .project-heading:first-child { margin-top: 4px; }
+  .project-heading::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .project-heading-count { background: var(--surface-2); color: var(--muted); border-radius: 999px; font-size: 10.5px; font-family: var(--mono); padding: 1px 8px; letter-spacing: 0; }
+
+  .notes-toggle { background: none; border: none; cursor: pointer; padding: 2px 8px; font-size: 12px; font-weight: 500; color: var(--accent-ink); border-radius: 6px; }
+  .notes-toggle:hover { background: var(--accent-soft); }
   .notes-panel {
-    display: none;
-    background: var(--card); border: 1px solid var(--line); border-top: none;
-    border-radius: 0 0 8px 8px;
-    margin: -2px 0 0 4px;            /* tuck under the card, aligned past the status stripe */
-    padding: 10px 14px;
-    font-size: 13px; color: var(--ink); word-break: break-word;
+    display: none; background: var(--card); border: 1px solid var(--line); border-top: none;
+    border-radius: 0 0 var(--r-md) var(--r-md); margin: -3px 13px 0; padding: 12px 15px 14px;
+    font-size: 13px; color: var(--ink-soft); box-shadow: var(--shadow-sm);
   }
   .task-item.notes-open .notes-panel { display: block; }
-  .panel-notes { white-space: pre-wrap; margin-bottom: 8px; }
+  .panel-notes { white-space: pre-wrap; margin-bottom: 10px; color: var(--ink-soft); }
 
-  /* Progress badge in the meta row (e.g. ☑ 2/5) */
-  .subtask-progress {
-    font-size: 11px; font-weight: 600; color: var(--muted);
-    background: var(--col-bg); border-radius: 999px; padding: 1px 8px;
-  }
-  .subtask-progress.complete { color: var(--green); }
+  .subtask-progress { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
+  .subtask-progress.complete { color: var(--green); background: var(--green-soft); }
 
-  /* Interactive checklist inside the detail panel */
-  .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-  .checklist-item { display: flex; align-items: center; gap: 8px; }
-  .checklist-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
-  .checklist-text { flex: 1; word-break: break-word; }
+  .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .checklist-item { display: flex; align-items: center; gap: 9px; padding: 4px 0; }
+  .checklist-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+  .checklist-text { flex: 1; word-break: break-word; font-size: 13px; }
   .checklist-item.done .checklist-text { text-decoration: line-through; color: var(--muted); }
-  .checklist-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 4px; line-height: 1; }
+  .checklist-remove { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 13px; padding: 2px 4px; line-height: 1; }
   .checklist-remove:hover { color: var(--red); }
-  .checklist-add { display: flex; gap: 8px; margin-top: 8px; }
-  .checklist-add input {
-    flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
-    font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink);
-  }
-  .checklist-add input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .checklist-add { display: flex; gap: 8px; margin-top: 10px; }
+  .checklist-add input { flex: 1; }
 
-  /* Mobile task card: title gets its own full-width row so it stops wrapping into
-     a narrow column, and the controls (status / edit / delete) drop to a second
-     row aligned right. Achieved with flex-wrap + ordering, no markup change. */
   @media (max-width: 640px) {
     .task { flex-wrap: wrap; gap: 8px 10px; }
-    .task .body { order: 2; flex: 1 1 auto; }           /* title beside the checkbox on row 1 */
-    .task input[type="checkbox"] { order: 1; }
-    .task .title { font-size: 16px; }
-    /* select + edit + delete wrap onto their own row, pushed to the right */
+    .task .body { order: 2; flex: 1 1 auto; }
+    .task input[type="checkbox"] { order: 1; width: 22px; height: 22px; }
+    .task .title { font-size: 15.5px; }
     .task select { order: 3; margin-left: auto; }
-    .task .edit { order: 4; }
-    .task .del  { order: 5; }
-    /* Bigger, easier-to-hit checkbox, separated from the action buttons */
-    .task input[type="checkbox"] { width: 24px; height: 24px; }
-    .task .edit, .task .del { font-size: 20px; padding: 6px 8px; }
+    .task .edit { order: 4; } .task .del { order: 5; }
+    .task .edit, .task .del { font-size: 19px; padding: 7px 9px; }
   }
-
-  /* Mobile layout polish: tighter vertical rhythm, scrollable tabs,
-     stacked filter/sort controls. Keeps the same single page uncluttered. */
   @media (max-width: 640px) {
-    .wrap { padding: 16px; }
-    /* Tabs scroll sideways instead of wrapping to a broken second row */
-    .tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+    .wrap { padding: 18px 16px 32px; }
+    .tabs { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
     .tabs::-webkit-scrollbar { display: none; }
-    .tab { flex: 0 0 auto; white-space: nowrap; }
-    /* Filter / sort: each label sits directly above its own control */
-    .controls { gap: 8px 12px; }
+    .tab { flex: 0 0 auto; padding: 7px 13px; }
     .controls label { width: 100%; margin-bottom: -4px; }
     .controls select { flex: 1 1 auto; }
     .controls .count { width: 100%; margin-left: 0; text-align: right; }
-    /* Trim the gaps between the big sections so tasks come into view sooner */
-    .search-row { margin-bottom: 10px; }
-    .controls { margin-bottom: 10px; }
+    .search-row { margin-bottom: 12px; }
+    .controls { margin-bottom: 12px; }
   }
 
-  /* Kanban board */
+  /* ============================ KANBAN ============================ */
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
-  .column {
-    background: var(--col-bg);
-    border-radius: 10px;
-    padding: 10px;
-    min-height: 120px;
-    transition: background .12s ease, outline-color .12s ease;
-    outline: 2px dashed transparent;
-  }
-  .column.drag-over { background: var(--accent-soft); outline-color: var(--accent); }
-  .column h2 {
-    margin: 4px 6px 10px;
-    font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted);
-    display: flex; align-items: center; gap: 8px;
-  }
-  .column h2 .col-count {
-    margin-left: auto; background: var(--col-count-bg); color: var(--muted);
-    border-radius: 999px; font-size: 11px; padding: 1px 8px; letter-spacing: 0;
-  }
-  .kcard {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 4px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    box-shadow: var(--shadow);
-    cursor: grab;
-  }
+  .column { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px; min-height: 140px; transition: background .12s, border-color .12s, box-shadow .12s; }
+  .column.drag-over { background: var(--accent-softer); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .column h2 { margin: 4px 6px 12px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .column h2 .col-count { margin-left: auto; background: var(--surface-3); color: var(--muted); border-radius: 999px; font-size: 11px; font-family: var(--mono); padding: 1px 8px; letter-spacing: 0; }
+  .kcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 11px 13px; margin-bottom: 8px; box-shadow: var(--shadow-sm); cursor: grab; position: relative; transition: border-color .12s, box-shadow .12s, transform .08s; }
+  .kcard::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--faint); }
+  .kcard.todo::before { background: var(--muted); } .kcard.doing::before { background: var(--amber); } .kcard.done::before { background: var(--green); }
+  .kcard:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
   .kcard:active { cursor: grabbing; }
-  .kcard.dragging { opacity: .4; }
-  .kcard.todo { border-left-color: var(--muted); }
-  .kcard.doing { border-left-color: var(--amber); }
-  .kcard.done { border-left-color: var(--green); }
-  .kcard .ktitle { font-size: 14px; font-weight: 500; word-break: break-word; }
+  .kcard.dragging { opacity: .5; box-shadow: var(--shadow-lg); transform: rotate(1.5deg); }
+  .kcard .ktitle { font-size: 13.5px; font-weight: 500; word-break: break-word; padding-left: 6px; }
   .kcard.done .ktitle { text-decoration: line-through; color: var(--muted); }
-  .kcard .kmeta { font-size: 12px; color: var(--muted); margin-top: 5px; display: flex; align-items: center; gap: 10px; }
+  .kcard .kmeta { font-size: 12px; color: var(--muted); margin-top: 6px; display: flex; align-items: center; gap: 8px; padding-left: 6px; }
   .kcard .kactions { margin-left: auto; display: flex; gap: 2px; }
-  .col-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 16px 8px; }
-  .kboard-hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
-  .kfilter-label { font-size: 13px; color: var(--muted); }
-  .kfilter-select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink); }
-  .kfilter-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .col-empty { text-align: center; color: var(--faint); font-size: 12px; padding: 20px 8px; border: 1px dashed var(--line-2); border-radius: var(--r-sm); }
+  .kboard-hint { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+  .kfilter-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .kfilter-select { padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-sm); font-size: 13px; background: var(--card); color: var(--ink); }
 
-  /* Gantt view */
-  .gantt { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
+  /* ============================ GANTT ============================ */
+  .gantt { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); overflow: hidden; box-shadow: var(--shadow-sm); }
   .gantt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  /* Rows have a fixed label column on the left; the rest is the bar track.
-     --gantt-label-w is shared by rows and the axis offset so they line up. */
   .gantt-inner { --gantt-label-w: 160px; position: relative; }
-  .gantt-axis {
-    position: relative; height: 28px; margin-left: var(--gantt-label-w);
-    border-bottom: 1px solid var(--line); background: var(--col-bg);
-  }
-  .gantt-tick {
-    position: absolute; top: 0; height: 28px; padding: 7px 0 0 5px;
-    font-size: 11px; color: var(--muted); white-space: nowrap;
-    border-left: 1px solid var(--line);
-  }
-  .gantt-today-line {
-    position: absolute; top: 28px; bottom: 0; width: 2px; background: var(--red);
-    margin-left: var(--gantt-label-w); z-index: 2; opacity: .7;
-  }
-  .gantt-group {
-    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--muted); padding: 8px 10px 4px;
-  }
-  .gantt-row { display: flex; align-items: center; min-height: 34px; border-top: 1px solid var(--line); }
-  .gantt-row-label {
-    width: var(--gantt-label-w); flex-shrink: 0; padding: 0 10px;
-    font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    position: sticky; left: 0; background: var(--card); z-index: 1;
-  }
-  .gantt-track { position: relative; height: 34px; flex-shrink: 0; }
-  .gantt-bar {
-    position: absolute; top: 6px; height: 22px; border-radius: 4px;
-    background: var(--accent-soft); border-left: 4px solid var(--muted);
-    display: flex; align-items: center; overflow: hidden;
-  }
-  .gantt-bar.todo  { border-left-color: var(--muted); }
-  .gantt-bar.doing { border-left-color: var(--amber); }
-  .gantt-bar.done  { border-left-color: var(--green); }
-  .gantt-bar-text {
-    font-size: 11px; color: var(--ink); padding: 0 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .gantt-undated { padding: 12px; border-top: 1px solid var(--line); }
-  .gantt-undated-head { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-  .gantt-undated-chip {
-    display: inline-block; margin: 0 6px 6px 0; padding: 3px 9px;
-    font-size: 12px; border-radius: 999px; background: var(--col-bg); color: var(--ink);
-    border-left: 3px solid var(--muted);
-  }
-  .gantt-undated-chip.doing { border-left-color: var(--amber); }
-  .gantt-undated-chip.done  { border-left-color: var(--green); }
-
-  /* Milestones on the Gantt: a diamond marker + upright label */
+  .gantt-axis { position: relative; height: 30px; margin-left: var(--gantt-label-w); border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .gantt-tick { position: absolute; top: 0; height: 30px; padding: 8px 0 0 6px; font-size: 11px; color: var(--muted); white-space: nowrap; border-left: 1px solid var(--line); font-family: var(--mono); }
+  .gantt-today-line { position: absolute; top: 30px; bottom: 0; width: 2px; background: var(--red); margin-left: var(--gantt-label-w); z-index: 2; opacity: .85; }
+  .gantt-group { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding: 10px 12px 5px; }
+  .gantt-row { display: flex; align-items: center; min-height: 36px; border-top: 1px solid var(--line); }
+  .gantt-row-label { width: var(--gantt-label-w); flex-shrink: 0; padding: 0 12px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; background: var(--card); z-index: 1; }
+  .gantt-track { position: relative; height: 36px; flex-shrink: 0; }
+  .gantt-bar { position: absolute; top: 7px; height: 22px; border-radius: 6px; background: var(--accent-soft); display: flex; align-items: center; overflow: hidden; box-shadow: var(--shadow-sm); }
+  .gantt-bar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--muted); }
+  .gantt-bar.todo  { background: var(--surface-3); } .gantt-bar.todo::before  { background: var(--muted); }
+  .gantt-bar.doing { background: var(--amber-soft); } .gantt-bar.doing::before { background: var(--amber); }
+  .gantt-bar.done  { background: var(--green-soft); } .gantt-bar.done::before  { background: var(--green); }
+  .gantt-bar-text { font-size: 11px; color: var(--ink-soft); padding: 0 8px 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .gantt-undated { padding: 14px; border-top: 1px solid var(--line); }
+  .gantt-undated-head { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .gantt-undated-chip { display: inline-block; margin: 0 6px 6px 0; padding: 4px 10px; font-size: 12px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); border-left: 3px solid var(--muted); }
+  .gantt-undated-chip.doing { border-left-color: var(--amber); } .gantt-undated-chip.done { border-left-color: var(--green); }
   .gantt-group-ms { margin-top: 4px; }
-  .gantt-ms-row { min-height: 30px; }
-  .gantt-diamond { position: absolute; top: 8px; height: 18px; display: flex; align-items: center; }
-  /* The diamond itself is a 45°-rotated square drawn as a pseudo-element so the
-     label beside it stays upright. Outlined = upcoming, filled = reached/passed. */
-  .gantt-diamond::before {
-    content: ""; width: 12px; height: 12px; transform: rotate(45deg); flex-shrink: 0;
-    background: var(--card); border: 2px solid var(--accent); margin-left: -6px;
-  }
+  .gantt-ms-row { min-height: 32px; }
+  .gantt-diamond { position: absolute; top: 9px; height: 18px; display: flex; align-items: center; }
+  .gantt-diamond::before { content: ""; width: 12px; height: 12px; transform: rotate(45deg); flex-shrink: 0; background: var(--card); border: 2px solid var(--accent); margin-left: -6px; }
   .gantt-diamond.reached::before { background: var(--accent); }
-  .gantt-diamond-label {
-    font-size: 11px; color: var(--ink); white-space: nowrap; margin-left: 6px;
-    text-shadow: 0 0 3px var(--card), 0 0 3px var(--card);   /* keep legible over gridlines/today-line */
-  }
-
-  /* Calendar */
-  .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .cal-bar .cal-title { font-size: 17px; font-weight: 600; min-width: 170px; }
-  .cal-nav {
-    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-    width: 32px; height: 32px; cursor: pointer; font-size: 16px; color: var(--ink); line-height: 1;
-  }
-  .cal-nav:hover { background: var(--bg); }
-  .cal-today-btn {
-    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-    padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
-  }
-  .cal-today-btn:hover { background: var(--bg); }
-  .cal-hint { font-size: 12px; color: var(--muted); margin-left: auto; }
-
-  /* Month / Week / Day segmented toggle */
-  .cal-modes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .cal-modes button {
-    background: var(--card); border: none; border-right: 1px solid var(--line);
-    padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted);
-  }
-  .cal-modes button:last-child { border-right: none; }
-  .cal-modes button.active { background: var(--accent); color: #fff; }
-  .cal-modes button:not(.active):hover { background: var(--bg); }
-
-  .calendar { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
-  /* Gridlines are drawn by a 1px column gap over a line-coloured background — uniform, no missing
-     borders. The header row uses the SAME column-gap so its columns line up exactly with the grid. */
-  .cal-weekdays {
-    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-    column-gap: 1px; background: var(--col-bg);
-  }
-  .cal-weekdays div {
-    padding: 9px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--muted); font-weight: 700; text-align: center; background: var(--col-bg);
-  }
-  .cal-weekdays div.weekend { color: var(--accent); background: var(--col-bg-2); }
-  .cal-grid {
-    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 1px; background: var(--line);            /* the gap shows this colour = gridlines */
-    border-top: 1px solid var(--line);
-  }
-  .cal-cell {
-    min-height: 96px; min-width: 0; background: var(--card);   /* min-width:0 lets the cell shrink so content can't widen the column */
-    padding: 5px 6px; cursor: pointer; position: relative; transition: background .1s ease;
-    overflow: hidden;
-  }
-  .cal-cell:hover { background: var(--accent-soft); }
-  .cal-cell.weekend { background: var(--cell-weekend); }
-  .cal-cell.weekend:hover { background: var(--accent-soft); }
-  .cal-cell.blank { background: var(--cell-blank); cursor: default; }
-  .cal-cell.blank:hover { background: var(--cell-blank); }
-  .cal-cell.today { background: var(--cell-today); }
-  .cal-cell.today:hover { background: var(--cell-today); filter: brightness(1.05); }
-  .cal-daynum { font-size: 12px; color: var(--muted); font-weight: 600; }
-  .cal-cell.today .cal-daynum {
-    background: var(--accent); color: #fff; border-radius: 50%;
-    width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
-  }
-  .cal-task {
-    display: block; max-width: 100%; box-sizing: border-box;
-    font-size: 11px; line-height: 1.3; margin-top: 3px; padding: 2px 5px; border-radius: 4px;
-    background: var(--accent-soft); color: var(--ink);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    border-left: 3px solid var(--accent);
-  }
-  .cal-task.todo { border-left-color: var(--muted); }
-  .cal-task.doing { border-left-color: var(--amber); }
-  .cal-task.done { border-left-color: var(--green); color: var(--muted); text-decoration: line-through; }
-  .cal-task.overdue { border-left-color: var(--red); }
-  .cal-more { font-size: 10px; color: var(--muted); margin-top: 2px; padding-left: 5px; }
-
-  /* Week view: taller cells, all tasks shown (no "+N more" cap) */
-  .calendar.week-mode .cal-cell { min-height: 320px; }
-  .calendar.week-mode .cal-weekdays div span { display: block; font-size: 14px; color: var(--ink); margin-top: 2px; }
-  .cal-cell.today .cal-wd-num { color: var(--accent); }
-
-  /* Day view: single column, generous spacing */
-  .calendar.day-mode .cal-weekdays { grid-template-columns: minmax(0, 1fr); }
-  .calendar.day-mode .cal-grid { grid-template-columns: minmax(0, 1fr); }
-  .calendar.day-mode .cal-cell { min-height: 360px; border-right: none; }
-  .calendar.day-mode .cal-task { white-space: normal; font-size: 13px; padding: 6px 9px; margin-top: 6px; }
-  .day-empty { color: var(--muted); font-size: 13px; padding: 18px 6px; }
-
+  .gantt-diamond-label { font-size: 11px; color: var(--ink-soft); white-space: nowrap; margin-left: 7px; font-weight: 500; text-shadow: 0 0 3px var(--card), 0 0 3px var(--card); }
+  .gantt-hint { display: none; font-size: 12px; color: var(--muted); margin: 0 0 10px; }
   @media (max-width: 640px) {
-    .cal-cell { min-height: 64px; }
-    .calendar.week-mode .cal-cell { min-height: 140px; }
-    .cal-task { font-size: 10px; }
-  }
-
-  /* Gantt is a desktop-first, horizontally-scrolling view. On a phone the fixed
-     label column was eating ~40% of the width, so shrink it (the CSS variable
-     drives the axis + today-line offsets too, so they stay aligned) and tighten
-     fonts. The chart still scrolls sideways — that's expected for a timeline. */
-  @media (max-width: 640px) {
-    .gantt-inner { --gantt-label-w: 104px; }
-    .gantt-row-label { font-size: 12px; padding: 0 6px; }
+    .gantt-inner { --gantt-label-w: 108px; }
+    .gantt-row-label { font-size: 12px; padding: 0 8px; }
     .gantt-tick { font-size: 10px; }
     .gantt-hint { display: block; }
   }
-  /* Scroll hint, shown only on mobile (hidden on desktop where it's obvious) */
-  .gantt-hint { display: none; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
+  /* ============================ CALENDAR ============================ */
+  .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .cal-bar .cal-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; min-width: 160px; }
+  .cal-nav { background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-sm); width: 34px; height: 34px; cursor: pointer; font-size: 16px; color: var(--ink-soft); line-height: 1; transition: background .12s, border-color .12s; }
+  .cal-nav:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+  .cal-today-btn { background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 7px 13px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink-soft); }
+  .cal-today-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .cal-hint { font-size: 12px; color: var(--faint); margin-left: auto; }
+  .cal-modes { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); padding: 2px; gap: 2px; }
+  .cal-modes button { background: transparent; border: none; border-radius: 6px; padding: 6px 13px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .cal-modes button.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+  [data-theme="dark"] .cal-modes button.active { background: var(--surface-3); }
+  .cal-modes button:not(.active):hover { color: var(--ink); }
+
+  .calendar { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--card); box-shadow: var(--shadow-sm); }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); column-gap: 1px; background: var(--line); }
+  .cal-weekdays div { padding: 10px 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; text-align: center; background: var(--surface-2); }
+  .cal-weekdays div.weekend { color: var(--accent-ink); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .cal-cell { min-height: 104px; min-width: 0; background: var(--card); padding: 6px 7px; cursor: pointer; position: relative; transition: background .1s; overflow: hidden; }
+  .cal-cell:hover { background: var(--accent-softer); }
+  .cal-cell.weekend { background: var(--cell-weekend); }
+  .cal-cell.weekend:hover { background: var(--accent-softer); }
+  .cal-cell.blank { background: var(--cell-blank); cursor: default; }
+  .cal-cell.blank:hover { background: var(--cell-blank); }
+  .cal-cell.today { background: var(--cell-today); }
+  .cal-cell.today:hover { background: var(--cell-today); }
+  .cal-daynum { font-size: 12px; color: var(--muted); font-weight: 600; font-family: var(--mono); }
+  .cal-cell.today .cal-daynum { background: var(--accent); color: var(--on-accent); border-radius: 50%; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; }
+  .cal-task { display: block; max-width: 100%; box-sizing: border-box; font-size: 11px; line-height: 1.35; margin-top: 3px; padding: 3px 6px; border-radius: 5px; background: var(--surface-2); color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2.5px solid var(--muted); font-weight: 500; }
+  .cal-task.todo { border-left-color: var(--muted); }
+  .cal-task.doing { border-left-color: var(--amber); }
+  .cal-task.done { border-left-color: var(--green); color: var(--faint); text-decoration: line-through; }
+  .cal-task.overdue { border-left-color: var(--red); }
+  .cal-more { font-size: 10px; color: var(--muted); margin-top: 3px; padding-left: 6px; font-weight: 500; }
+
+  .calendar.week-mode .cal-cell { min-height: 320px; }
+  .calendar.week-mode .cal-weekdays div span { display: block; font-size: 14px; color: var(--ink); margin-top: 2px; font-family: var(--mono); }
+  .cal-cell.today .cal-wd-num { color: var(--accent-ink); }
+  .calendar.day-mode .cal-weekdays { grid-template-columns: minmax(0, 1fr); }
+  .calendar.day-mode .cal-grid { grid-template-columns: minmax(0, 1fr); }
+  .calendar.day-mode .cal-cell { min-height: 380px; border-right: none; }
+  .calendar.day-mode .cal-task { white-space: normal; font-size: 13px; padding: 7px 10px; margin-top: 7px; }
+  .day-empty { color: var(--muted); font-size: 13px; padding: 20px 6px; }
+
+  @media (max-width: 640px) {
+    .cal-cell { min-height: 68px; }
+    .calendar.week-mode .cal-cell { min-height: 150px; }
+    .cal-task { font-size: 10px; }
+    .cal-hint { display: none; }
+  }
+
+  footer { text-align: center; color: var(--faint); font-size: 12px; padding: 32px 24px; }
+
 </style>
 </head>
 <body>
   <header>
     <div class="header-main">
-      <div>
-        <h1>📋 Project Tracker</h1>
-        <p>A simple task tracker that saves to your browser. No login, no server.</p>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="brand-text">
+          <h1>Anando's Uber Project tracker</h1>
+          <p>A simple task tracker that saves to your browser. No login, no server.</p>
+        </div>
       </div>
       <div class="header-actions">
-        <button type="button" class="btn-ghost" id="projectsBtn" title="Manage projects">📁 Projects</button>
-        <button type="button" class="btn-ghost" id="milestonesBtn" title="Manage milestones">◆ Milestones</button>
-        <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙 Dark</button>
-        <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">⬇ Export</button>
-        <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">⬆ Import</button>
+        <button type="button" class="btn-ghost" id="projectsBtn" title="Manage projects">Projects</button>
+        <button type="button" class="btn-ghost" id="milestonesBtn" title="Manage milestones">Milestones</button>
+        <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">Dark</button>
+        <button type="button" class="btn-ghost" id="exportBtn" title="Download all tasks as a JSON backup">Export</button>
+        <button type="button" class="btn-ghost" id="importBtn" title="Load tasks from a JSON file">Import</button>
         <!-- Hidden file input that the Import button triggers -->
         <input type="file" id="importFile" accept="application/json,.json" style="display:none" />
       </div>
@@ -707,7 +620,7 @@
     <!-- LIST VIEW -->
     <section id="view-list">
       <div class="search-row">
-        <input type="search" id="searchInput" class="search-box" placeholder="🔎 Search tasks…" aria-label="Search tasks" />
+        <input type="search" id="searchInput" class="search-box" placeholder="Search tasks…" aria-label="Search tasks" />
         <button type="button" class="chip" id="chipOverdue" data-chip="overdue">Overdue</button>
         <button type="button" class="chip" id="chipHigh" data-chip="high">High priority</button>
       </div>
@@ -751,7 +664,7 @@
         <button type="button" class="chip" id="kChipOverdue" data-chip="overdue">Overdue</button>
         <button type="button" class="chip" id="kChipHigh" data-chip="high">High priority</button>
       </div>
-      <p class="kboard-hint">Drag a card between columns to change its status. 🖐️</p>
+      <p class="kboard-hint">Drag a card between columns to change its status.</p>
       <div class="board" id="kanbanBoard"></div>
     </section>
 
@@ -779,7 +692,7 @@
 
     <!-- GANTT VIEW -->
     <section id="view-gantt" style="display:none">
-      <p class="gantt-hint">Scroll sideways to see the full timeline. 👉</p>
+      <p class="gantt-hint">Scroll sideways to see the full timeline.</p>
       <div class="gantt" id="ganttWrap"></div>
     </section>
   </div>
@@ -809,7 +722,7 @@ function resolveTheme(saved, systemPrefersDark) {
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("themeBtn");
-  if (btn) btn.textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+  if (btn) btn.textContent = theme === "dark" ? "Light" : "Dark";
 }
 function systemPrefersDark() {
   return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -1394,8 +1307,8 @@ function renderList() {
 
   if (rows.length === 0) {
     listEl.innerHTML = anyFilterActive
-      ? '<div class="empty">No tasks match your search or filters. Try clearing them. 🔍</div>'
-      : '<div class="empty">No tasks here yet. Add one above to get started! 🚀</div>';
+      ? '<div class="empty">No tasks match your search or filters. Try clearing them.</div>'
+      : '<div class="empty">No tasks yet. Create your first one to get started.</div>';
     return;
   }
 
@@ -1460,9 +1373,9 @@ function buildTaskItem(t, today) {
       <div class="title"></div>
       <div class="meta">
         <span class="pill ${t.status}">${STATUS_LABEL[t.status]}</span>
-        ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
-        ${hasSubtasks ? `<span class="subtask-progress${prog.done === prog.total ? " complete" : ""}">☑ ${prog.done}/${prog.total}</span>` : ""}
-        ${hasDetail ? `<button class="notes-toggle" aria-expanded="false" title="Show details">${hasNotes && hasSubtasks ? "📝 Details" : hasNotes ? "📝 Notes" : "☑ Checklist"}</button>` : ""}
+        ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
+        ${hasSubtasks ? `<span class="subtask-progress${prog.done === prog.total ? " complete" : ""}">${prog.done}/${prog.total}</span>` : ""}
+        ${hasDetail ? `<button class="notes-toggle" aria-expanded="false" title="Show details">${hasNotes && hasSubtasks ? "Details" : hasNotes ? "Notes" : "Checklist"}</button>` : ""}
       </div>
     </div>
     <select aria-label="Change status">
@@ -1609,7 +1522,7 @@ function renderKanban() {
       card.innerHTML = `
         <div class="ktitle"></div>
         <div class="kmeta">
-          ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">📅 ${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
+          ${t.due ? `<span class="due ${overdue ? "overdue" : ""}">${fmtDate(t.due)}${overdue ? " · overdue" : ""}</span>` : ""}
           <span class="kactions">
             <button class="edit" aria-label="Edit task" title="Edit">✏️</button>
             <button class="del" aria-label="Delete task" title="Delete">✕</button>
@@ -2044,7 +1957,7 @@ function renderGantt() {
   if (!range) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "No dated tasks to chart yet. Give a task a start and/or due date to see it on the timeline. 📊";
+    empty.textContent = "No dated tasks to chart yet. Give a task a start and/or due date to see it on the timeline.";
     wrap.appendChild(empty);
     return;
   }
