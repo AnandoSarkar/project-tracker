@@ -2582,10 +2582,15 @@ document.getElementById("accountClose").addEventListener("click", () => {
 // Switch the app to cloud-backed data: fetch everything for the user, replace the
 // in-memory arrays, persist a local cache copy, and re-render. On error, stay on
 // whatever's in memory and surface a banner.
+let migrationPending = false;   // guard: a first-login migration is in progress
+
 async function enterCloudMode(user) {
   cloudUser = user;
+  // If a migration is mid-flight, don't let a concurrent auth event re-enter and
+  // clobber state (Supabase fires multiple auth events around sign-in).
+  if (migrationPending) return;
   try {
-    // Snapshot LOCAL data first — before the cloud fetch overwrites the in-memory
+    // Snapshot LOCAL data first — before anything can overwrite the in-memory
     // arrays — so a first-login migration can offer to upload it.
     const localSnapshot = {
       tasks: load(),
@@ -2599,21 +2604,25 @@ async function enterCloudMode(user) {
     const cloudCount = data.tasks.length + data.projects.length + data.milestones.length;
 
     // First-login migration: cloud is empty but this device has data → offer upload.
-    // We do NOT touch localStorage yet (so the local copy stays intact as the source).
+    // Set the guard BEFORE the await-heavy offerMigration so no concurrent
+    // enterCloudMode can run the destructive normal path in the meantime.
     if (cloudCount === 0 && localCount > 0) {
+      migrationPending = true;
       tasks = localSnapshot.tasks;
       projects = localSnapshot.projects;
       milestones = localSnapshot.milestones;
       render();                       // keep showing the local data behind the prompt
-      offerMigration(localSnapshot);  // async; uploads on confirm
+      offerMigration(localSnapshot);  // async; clears migrationPending when done
       return;
     }
 
-    // Normal cloud load: cloud is the source of truth.
+    // Normal cloud load.
     tasks = data.tasks.map(normalizeTask);
     projects = data.projects.map(normalizeProject);
     milestones = data.milestones.map(normalizeMilestone);
-    save(); saveProjects(); saveMilestones();   // mirror cloud → local cache
+    // Only mirror cloud → local when the cloud actually has data. NEVER overwrite a
+    // non-empty local cache with an empty cloud result (that was a data-loss bug).
+    if (cloudCount > 0) { save(); saveProjects(); saveMilestones(); }
     render();
   } catch (e) {
     cloudFail("load", e.message || e);
@@ -2642,6 +2651,7 @@ async function offerMigration(snapshot) {
     // is untouched and still recoverable via Export/Import.
     tasks = []; projects = []; milestones = [];
     save(); saveProjects(); saveMilestones();
+    migrationPending = false;
     render();
     return;
   }
@@ -2651,9 +2661,11 @@ async function offerMigration(snapshot) {
     for (const t of snapshot.tasks)      { const r = await Cloud.upsertTask(t, cloudUser.id);      if (r.error) throw new Error(r.error); }
     for (const m of snapshot.milestones) { const r = await Cloud.upsertMilestone(m, cloudUser.id); if (r.error) throw new Error(r.error); }
     showBanner("Uploaded your local data to the cloud. ✓", "ok");
+    migrationPending = false;   // clear BEFORE re-entering so the re-fetch can run
     // Re-fetch so the app now reflects the cloud copy (round-trip confirmation).
     await enterCloudMode(cloudUser);
   } catch (e) {
+    migrationPending = false;
     cloudFail("upload", e.message || e);
   }
 }
