@@ -272,6 +272,22 @@
   .pp-item .pp-delete:hover { color: var(--red); background: var(--red-soft); }
   .pp-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 
+  /* Account / auth panel */
+  .auth-intro { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .auth-form { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+  .auth-form input {
+    padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; font-family: inherit; background: var(--surface); color: var(--ink);
+  }
+  .auth-form input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .auth-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .auth-msg { font-size: 13px; margin: 8px 0 0; min-height: 1em; }
+  .auth-msg.error { color: var(--red); }
+  .auth-msg.ok { color: var(--green); }
+  .auth-linkbtn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; font-family: inherit; padding: 4px; text-decoration: underline; }
+  .auth-account { font-size: 14px; }
+  .auth-account .auth-email { font-family: var(--mono); }
+
   /* ============================ BADGES ============================ */
   .prio { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 5px; flex-shrink: 0; }
   .prio-high { background: var(--red-soft); color: var(--red); }
@@ -527,6 +543,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button type="button" class="btn-ghost" id="accountBtn" title="Sign in to sync across devices">Sign in</button>
         <button type="button" class="btn-ghost" id="projectsBtn" title="Manage projects">Projects</button>
         <button type="button" class="btn-ghost" id="milestonesBtn" title="Manage milestones">Milestones</button>
         <button type="button" class="btn-ghost" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">Dark</button>
@@ -539,6 +556,16 @@
   </header>
 
   <div class="wrap">
+    <!-- Account / auth panel (collapsible). Reuses .projects-panel / .pp-* styling.
+         Body is rendered by JS: a sign-in/up form when logged out, account info when in. -->
+    <section class="projects-panel" id="accountPanel" hidden>
+      <div class="pp-head">
+        <h2>Account</h2>
+        <button type="button" class="pp-close" id="accountClose" aria-label="Close account panel">✕</button>
+      </div>
+      <div id="accountBody"></div>
+    </section>
+
     <!-- Projects management panel (collapsible). Hidden until the Projects button is clicked. -->
     <section class="projects-panel" id="projectsPanel" hidden>
       <div class="pp-head">
@@ -2334,6 +2361,168 @@ document.getElementById("milestoneAddForm").addEventListener("submit", e => {
 document.getElementById("projectsBtn").addEventListener("click", () => {
   document.getElementById("milestonesPanel").hidden = true;
 });
+
+// --- Account / auth UI (Phase 4) -----------------------------------------
+// This phase adds AUTH ONLY. Logging in updates the header + panel but does NOT
+// yet move data to the cloud (that's Phase 5) — so the app keeps reading
+// localStorage regardless of login state for now.
+let currentUser = null;   // null = logged out; otherwise the Supabase user object
+
+// Reflect auth state on the header button.
+function syncAccountButton() {
+  const btn = document.getElementById("accountBtn");
+  if (!btn) return;
+  if (currentUser) {
+    btn.textContent = "Account";
+    btn.title = "Signed in as " + currentUser.email;
+  } else {
+    btn.textContent = "Sign in";
+    btn.title = window.Cloud && window.Cloud.isConfigured
+      ? "Sign in to sync across devices"
+      : "Sign-in unavailable (offline or not configured)";
+  }
+}
+
+// Render the panel body for the current state. Built with DOM APIs (no innerHTML
+// for any user/email text) so nothing can be injected.
+function renderAccountPanel() {
+  const body = document.getElementById("accountBody");
+  if (!body) return;
+  body.innerHTML = "";
+
+  // Cloud not available (offline / SDK failed to load): explain, don't break.
+  if (!window.Cloud || !window.Cloud.isConfigured) {
+    const p = document.createElement("p");
+    p.className = "auth-intro";
+    p.textContent = "Cloud sync isn't available right now. The app keeps working with data stored on this device.";
+    body.appendChild(p);
+    return;
+  }
+
+  if (currentUser) {
+    // Logged in: show email + sign out.
+    const info = document.createElement("p");
+    info.className = "auth-account";
+    info.appendChild(document.createTextNode("Signed in as "));
+    const em = document.createElement("span");
+    em.className = "auth-email";
+    em.textContent = currentUser.email;     // safe text
+    info.appendChild(em);
+    body.appendChild(info);
+
+    const note = document.createElement("p");
+    note.className = "auth-intro";
+    note.textContent = "Your data will sync to your account once cloud storage is enabled.";
+    body.appendChild(note);
+
+    const out = document.createElement("button");
+    out.type = "button";
+    out.className = "btn";
+    out.textContent = "Sign out";
+    out.addEventListener("click", async () => {
+      out.disabled = true;
+      const { error } = await window.Cloud.signOut();
+      out.disabled = false;
+      if (error) setAuthMsg(error, "error");
+    });
+    body.appendChild(out);
+    return;
+  }
+
+  // Logged out: sign-in / sign-up form (one form, toggled by mode).
+  let mode = "signin";   // "signin" | "signup"
+
+  const intro = document.createElement("p");
+  intro.className = "auth-intro";
+  intro.textContent = "Sign in to sync your tasks across devices. (Optional — the app works without an account.)";
+  body.appendChild(intro);
+
+  const form = document.createElement("form");
+  form.className = "auth-form";
+
+  const email = document.createElement("input");
+  email.type = "email"; email.placeholder = "Email"; email.autocomplete = "email"; email.required = true;
+  const pass = document.createElement("input");
+  pass.type = "password"; pass.placeholder = "Password"; pass.autocomplete = "current-password"; pass.required = true;
+
+  const actions = document.createElement("div");
+  actions.className = "auth-actions";
+  const submit = document.createElement("button");
+  submit.type = "submit"; submit.className = "btn";
+  const toggle = document.createElement("button");
+  toggle.type = "button"; toggle.className = "auth-linkbtn";
+
+  const msg = document.createElement("p");
+  msg.className = "auth-msg"; msg.id = "authMsg";
+
+  function applyMode() {
+    submit.textContent = mode === "signin" ? "Sign in" : "Create account";
+    toggle.textContent = mode === "signin" ? "Need an account? Sign up" : "Have an account? Sign in";
+    pass.autocomplete = mode === "signin" ? "current-password" : "new-password";
+    msg.textContent = "";
+  }
+  toggle.addEventListener("click", () => { mode = mode === "signin" ? "signup" : "signin"; applyMode(); });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!email.value || !pass.value) return;
+    submit.disabled = true;
+    setAuthMsg(mode === "signin" ? "Signing in…" : "Creating account…", "");
+    const fn = mode === "signin" ? window.Cloud.signIn : window.Cloud.signUp;
+    const { error } = await fn(email.value.trim(), pass.value);
+    submit.disabled = false;
+    if (error) {
+      setAuthMsg(error, "error");
+    } else if (mode === "signup") {
+      // Supabase may require email confirmation depending on project settings.
+      setAuthMsg("Account created. If email confirmation is on, check your inbox, then sign in.", "ok");
+    }
+    // On successful sign-in, onAuthChange fires and re-renders the panel.
+  });
+
+  actions.append(submit, toggle);
+  form.append(email, pass, actions);
+  body.append(form, msg);
+  applyMode();
+}
+
+function setAuthMsg(text, kind) {
+  const msg = document.getElementById("authMsg");
+  if (!msg) return;
+  msg.textContent = text;
+  msg.className = "auth-msg" + (kind ? " " + kind : "");
+}
+
+// Open/close the account panel (closes the other panels for symmetry).
+document.getElementById("accountBtn").addEventListener("click", () => {
+  const panel = document.getElementById("accountPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) {
+    document.getElementById("projectsPanel").hidden = true;
+    document.getElementById("milestonesPanel").hidden = true;
+    renderAccountPanel();
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+});
+document.getElementById("accountClose").addEventListener("click", () => {
+  document.getElementById("accountPanel").hidden = true;
+});
+
+// Wire up to Cloud once it's ready (the SDK loads async as a deferred module).
+function initAccount() {
+  if (!window.Cloud || !window.Cloud.isConfigured) { syncAccountButton(); return; }
+  // Reflect any restored session, then react to future changes.
+  window.Cloud.getUser().then(u => { currentUser = u; syncAccountButton(); });
+  window.Cloud.onAuthChange(session => {
+    currentUser = session ? session.user : null;
+    syncAccountButton();
+    // Keep the open panel in sync (e.g. it flips to "signed in as…" on login).
+    if (!document.getElementById("accountPanel").hidden) renderAccountPanel();
+  });
+}
+if (window.Cloud) initAccount();
+else window.addEventListener("cloud-ready", initAccount, { once: true });
+syncAccountButton();   // initial label (likely "Sign in" until Cloud confirms)
 
 // Dark mode toggle
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);

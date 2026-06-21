@@ -45,12 +45,36 @@ function onAuthChange(cb) {
   return () => data.subscription.unsubscribe();
 }
 
+// --- Auth actions. Each returns { error } (null on success) so the UI can show a
+// friendly message. Thin wrappers; the SDK persists the session itself. ---
+
+async function signUp(email, password) {
+  if (!client) return { error: "Cloud not configured." };
+  const { error } = await client.auth.signUp({ email, password });
+  return { error: error ? error.message : null };
+}
+
+async function signIn(email, password) {
+  if (!client) return { error: "Cloud not configured." };
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  return { error: error ? error.message : null };
+}
+
+async function signOut() {
+  if (!client) return { error: "Cloud not configured." };
+  const { error } = await client.auth.signOut();
+  return { error: error ? error.message : null };
+}
+
 window.Cloud = {
   get client() { return client; },   // raw client for later phases (queries)
   isConfigured: !!client,
   getSession,
   getUser,
   onAuthChange,
+  signUp,
+  signIn,
+  signOut,
 };
 
 // Signal readiness so the app can react once the module has loaded (it's deferred).
