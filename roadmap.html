@@ -225,9 +225,9 @@ const ROADMAP = {
     note: "next steps",
     items: [
       {
-        t: "Roadmap complete! 🎉",
-        learn: "Every planned feature has shipped",
-        d: "From a single-file localStorage task list to a multi-view, installable PWA with cloud sync across devices. Everything on the roadmap is Done. Future ideas if the itch returns: real-time multi-device updates (Supabase subscriptions), offline-first write queue, task↔milestone dependencies (the dependsOn hook is already in place), or sharing/collaboration."
+        t: "All caught up 🎉",
+        learn: "Pick the next item from Later",
+        d: "From a single-file localStorage task list to a multi-view, installable PWA with cloud sync across devices — everything built so far is Done. Next up in Later: an account settings menu (building on the new auth)."
       }
     ]
   },
@@ -236,16 +236,18 @@ const ROADMAP = {
     note: "stretch goals",
     items: [
       {
-        t: "Nothing queued",
-        learn: "The backlog is clear",
-        d: "All planned stretch goals have shipped. New ideas can land here whenever inspiration strikes."
+        t: "Account settings menu",
+        learn: "Account management UX + Supabase auth methods",
+        effort: "Medium",
+        d: "A settings area for the signed-in account, building on the existing Account panel. Candidate features: change password (supabase.auth.updateUser), change email, sign out everywhere, and delete account (remove the user + cascade their rows). Also a natural home for re-enabling email confirmation and, later, Google sign-in. Teaches the account-management side of auth — the flows beyond just sign-in/up — and careful handling of destructive actions (delete account needs a clear confirm + cascades via the user_id FKs already in the schema)."
       }
     ]
   }
 };
 
 const board = document.getElementById("board");
-Object.keys(ROADMAP).forEach(key => {
+// Render order: Now and Later first, Done last (so completed work sits at the bottom).
+["now", "later", "done"].forEach(key => {
   const col = ROADMAP[key];
   const wrap = document.createElement("div");
   wrap.className = "col " + key;

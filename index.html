@@ -2750,14 +2750,42 @@ document.getElementById("tabs").addEventListener("click", e => {
   render();
 });
 
-// --- Seed a couple of sample tasks on first ever visit ---
-if (tasks.length === 0 && !Store.has("tasks")) {
-  const t = todayStr();
+// --- Seed a sample "Kitchen Redesign" project on first ever visit ---
+// Dates are relative to today so the timeline/calendar always look populated
+// whenever someone first opens the app (not anchored to a fixed past date).
+// This showcases projects, priorities, start→due spans, subtasks, and milestones.
+if (tasks.length === 0 && !Store.has("tasks") && !Store.has("projects")) {
+  const d = n => addDays(todayStr(), n);    // ISO date n days from today (n<0 = past)
+  const pid = uid();                        // the sample project's id
+  let order = Date.now();                    // descending created stamps keep list order stable
+  const C = () => order--;
+
+  projects = [{ id: pid, name: "Kitchen Redesign", created: C() }];
+
   tasks = [
-    { id: uid(), title: "Welcome! Edit or delete me 👋", due: t, status: "todo", priority: "none", created: Date.now() },
-    { id: uid(), title: "Try marking a task as done", due: "", status: "doing", priority: "low", created: Date.now() - 1 },
+    { id: uid(), title: "Set budget & brief",        start: d(-14), due: d(-12), status: "done",  priority: "high", notes: "Agreed overall budget and must-haves vs nice-to-haves.", projectId: pid, subtasks: [{id:uid(),text:"Agree budget",done:true},{id:uid(),text:"List must-haves",done:true}], created: C() },
+    { id: uid(), title: "Measure the space",         start: d(-12), due: d(-10), status: "done",  priority: "med",  notes: "", projectId: pid, subtasks: [], created: C() },
+    { id: uid(), title: "Choose layout",             start: d(-10), due: d(-4),  status: "done",  priority: "high", notes: "Galley vs L-shape — went with L-shape for the island.", projectId: pid, subtasks: [{id:uid(),text:"Sketch options",done:true},{id:uid(),text:"Get partner sign-off",done:true}], created: C() },
+    { id: uid(), title: "Pick cabinets & worktops",  start: d(-3),  due: d(4),   status: "doing", priority: "high", notes: "Shortlisted 3 suppliers; awaiting quotes.", projectId: pid, subtasks: [{id:uid(),text:"Visit showroom",done:true},{id:uid(),text:"Request quotes",done:true},{id:uid(),text:"Compare quotes",done:false}], created: C() },
+    { id: uid(), title: "Choose appliances",         start: d(0),   due: d(7),   status: "doing", priority: "med",  notes: "Oven, hob, dishwasher, fridge.", projectId: pid, subtasks: [{id:uid(),text:"Oven + hob",done:true},{id:uid(),text:"Dishwasher",done:false},{id:uid(),text:"Fridge",done:false}], created: C() },
+    { id: uid(), title: "Hire contractor",           start: d(5),   due: d(12),  status: "todo",  priority: "high", notes: "Get 3 quotes, check references.", projectId: pid, subtasks: [{id:uid(),text:"Collect quotes",done:false},{id:uid(),text:"Check references",done:false}], created: C() },
+    { id: uid(), title: "Order materials",           start: d(12),  due: d(16),  status: "todo",  priority: "med",  notes: "Order once contractor confirms lead times.", projectId: pid, subtasks: [], created: C() },
+    { id: uid(), title: "Demolition & strip-out",    start: d(20),  due: d(23),  status: "todo",  priority: "low",  notes: "", projectId: pid, subtasks: [], created: C() },
+    { id: uid(), title: "Install cabinets & worktop",start: d(24),  due: d(31),  status: "todo",  priority: "high", notes: "", projectId: pid, subtasks: [], created: C() },
+    { id: uid(), title: "Snagging & sign-off",       start: d(33),  due: d(35),  status: "todo",  priority: "med",  notes: "Walk through, list defects, get them fixed.", projectId: pid, subtasks: [], created: C() },
   ];
-  save();
+
+  milestones = [
+    { id: uid(), name: "Design finalised",   date: d(4),  projectId: pid, dependsOn: [], created: C() },
+    { id: uid(), name: "Build starts",       date: d(20), projectId: pid, dependsOn: [], created: C() },
+    { id: uid(), name: "Kitchen complete 🎉", date: d(35), projectId: pid, dependsOn: [], created: C() },
+  ];
+
+  // Normalise through the same migration layer real data uses, then persist.
+  tasks = tasks.map(normalizeTask);
+  projects = projects.map(normalizeProject);
+  milestones = milestones.map(normalizeMilestone);
+  save(); saveProjects(); saveMilestones();
 }
 
 render();
