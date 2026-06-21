@@ -421,6 +421,58 @@
   .kfilter-select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--card); color: var(--ink); }
   .kfilter-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
+  /* Gantt view */
+  .gantt { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
+  .gantt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Rows have a fixed label column on the left; the rest is the bar track.
+     --gantt-label-w is shared by rows and the axis offset so they line up. */
+  .gantt-inner { --gantt-label-w: 160px; position: relative; }
+  .gantt-axis {
+    position: relative; height: 28px; margin-left: var(--gantt-label-w);
+    border-bottom: 1px solid var(--line); background: var(--col-bg);
+  }
+  .gantt-tick {
+    position: absolute; top: 0; height: 28px; padding: 7px 0 0 5px;
+    font-size: 11px; color: var(--muted); white-space: nowrap;
+    border-left: 1px solid var(--line);
+  }
+  .gantt-today-line {
+    position: absolute; top: 28px; bottom: 0; width: 2px; background: var(--red);
+    margin-left: var(--gantt-label-w); z-index: 2; opacity: .7;
+  }
+  .gantt-group {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); padding: 8px 10px 4px;
+  }
+  .gantt-row { display: flex; align-items: center; min-height: 34px; border-top: 1px solid var(--line); }
+  .gantt-row-label {
+    width: var(--gantt-label-w); flex-shrink: 0; padding: 0 10px;
+    font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    position: sticky; left: 0; background: var(--card); z-index: 1;
+  }
+  .gantt-track { position: relative; height: 34px; flex-shrink: 0; }
+  .gantt-bar {
+    position: absolute; top: 6px; height: 22px; border-radius: 4px;
+    background: var(--accent-soft); border-left: 4px solid var(--muted);
+    display: flex; align-items: center; overflow: hidden;
+  }
+  .gantt-bar.todo  { border-left-color: var(--muted); }
+  .gantt-bar.doing { border-left-color: var(--amber); }
+  .gantt-bar.done  { border-left-color: var(--green); }
+  .gantt-bar-text {
+    font-size: 11px; color: var(--ink); padding: 0 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .gantt-undated { padding: 12px; border-top: 1px solid var(--line); }
+  .gantt-undated-head { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .gantt-undated-chip {
+    display: inline-block; margin: 0 6px 6px 0; padding: 3px 9px;
+    font-size: 12px; border-radius: 999px; background: var(--col-bg); color: var(--ink);
+    border-left: 3px solid var(--muted);
+  }
+  .gantt-undated-chip.doing { border-left-color: var(--amber); }
+  .gantt-undated-chip.done  { border-left-color: var(--green); }
+
   /* Calendar */
   .cal-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .cal-bar .cal-title { font-size: 17px; font-weight: 600; min-width: 170px; }
@@ -551,7 +603,7 @@
       <button class="tab active" data-view="list">List</button>
       <button class="tab" data-view="kanban">Kanban</button>
       <button class="tab" data-view="calendar">Calendar</button>
-      <button class="tab" data-view="gantt" disabled>Gantt<span class="soon">soon</span></button>
+      <button class="tab" data-view="gantt">Gantt</button>
     </div>
 
     <!-- Mobile-only toggle: collapses the form so the task list is what you see first.
@@ -665,6 +717,11 @@
         </div>
         <div class="cal-grid" id="calGrid"></div>
       </div>
+    </section>
+
+    <!-- GANTT VIEW -->
+    <section id="view-gantt" style="display:none">
+      <div class="gantt" id="ganttWrap"></div>
     </section>
   </div>
 
@@ -866,6 +923,67 @@ function fmtDate(iso) {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+// --- Gantt scale math (Phase 1) ---
+// Pure date→pixel functions, no DOM. These are the core of the timeline view:
+// they map calendar dates onto an x-axis. Tested in isolation before any rendering.
+//
+// All parsing uses `iso + "T00:00:00"` (local midnight) — the SAME convention as
+// fmtDate above — so day arithmetic isn't thrown off by UTC offsets.
+
+// Parse a "YYYY-MM-DD" string to a local-midnight Date. Returns null for empty/invalid.
+function parseISO(iso) {
+  if (!iso || typeof iso !== "string") return null;
+  const d = new Date(iso + "T00:00:00");
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Whole days from date `a` to date `b` (b - a). Positive if b is later.
+// Uses UTC math on the parsed local-midnight dates to sidestep DST hour shifts:
+// a 1-hour DST jump could otherwise make a 24h difference round to 0.
+function daysBetween(aIso, bIso) {
+  const a = parseISO(aIso), b = parseISO(bIso);
+  if (!a || !b) return 0;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const aUTC = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const bUTC = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((bUTC - aUTC) / MS_PER_DAY);
+}
+
+// X-pixel for a date, given the timeline's start date and a per-day pixel scale.
+// rangeStart maps to x=0; each day after adds pxPerDay. Returns 0 for bad input.
+function dateToX(iso, rangeStartIso, pxPerDay) {
+  if (!iso || !rangeStartIso) return 0;
+  return daysBetween(rangeStartIso, iso) * pxPerDay;
+}
+
+// Add (or subtract) whole days to an ISO date, returning a new ISO string.
+// Used to pad the timeline a little past its first/last dates. "" for bad input.
+function addDays(iso, n) {
+  const d = parseISO(iso);
+  if (!d) return "";
+  d.setDate(d.getDate() + n);
+  return ymd(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// Compute the timeline's extent from the dates present across tasks AND milestones.
+// Considers task.start, task.due, and milestone.date. Returns {start, end} ISO strings,
+// or null when nothing is dated (caller shows an empty state). `end` is always >= `start`.
+function timelineRange(tasks, milestones) {
+  const dates = [];
+  (tasks || []).forEach(t => {
+    if (t.start) dates.push(t.start);
+    if (t.due) dates.push(t.due);
+  });
+  (milestones || []).forEach(m => {
+    if (m.date) dates.push(m.date);
+  });
+  const valid = dates.filter(d => parseISO(d));
+  if (valid.length === 0) return null;
+  valid.sort();                       // ISO date strings sort chronologically as plain strings
+  return { start: valid[0], end: valid[valid.length - 1] };
+}
+
 const STATUS_LABEL = { todo: "To Do", doing: "In Progress", done: "Done" };
 
 // Priority: order is used for sorting (higher number = more urgent)
@@ -1685,12 +1803,160 @@ function renderProjectFilterOptions() {
   });
 }
 
+// --- Rendering (Gantt view) ---
+const GANTT_PX_PER_DAY = 26;   // horizontal scale: pixels per calendar day
+const GANTT_PAD_DAYS = 2;      // breathing room on each side of the date range
+const GANTT_MIN_BAR = 8;       // min bar width (px) so a 1-day task is still visible
+
+// A task is "dated" (chartable) if it has a start, a due, or both.
+function ganttBarDates(t) {
+  // Normalize to a [start, end] pair:
+  //  - both present → use them (clamp end >= start to avoid negative-width bars)
+  //  - only due      → single-day marker on the due date
+  //  - only start    → single-day marker on the start date
+  const s = t.start || t.due;
+  let e = t.due || t.start;
+  if (!s) return null;
+  if (daysBetween(s, e) < 0) e = s;   // guard against start-after-due bad data
+  return { start: s, end: e };
+}
+
+function renderGantt() {
+  const wrap = document.getElementById("ganttWrap");
+  wrap.innerHTML = "";
+
+  // Respect the global project filter, like the other views.
+  const visibleTasks = tasks.filter(matchesProjectFilter);
+  const milestones = [];   // none yet — milestone data model lands in Phase 5
+
+  const dated = visibleTasks.filter(t => t.start || t.due);
+  const undated = visibleTasks.filter(t => !t.start && !t.due);
+
+  const range = timelineRange(visibleTasks, milestones);
+  if (!range) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No dated tasks to chart yet. Give a task a start and/or due date to see it on the timeline. 📊";
+    wrap.appendChild(empty);
+    return;
+  }
+
+  // Pad the range a couple of days each side so bars aren't flush to the edges.
+  const rangeStart = addDays(range.start, -GANTT_PAD_DAYS);
+  const rangeEnd = addDays(range.end, GANTT_PAD_DAYS);
+  const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
+  const chartWidth = totalDays * GANTT_PX_PER_DAY;
+  const today = todayStr();
+
+  // The chart scrolls horizontally as ONE unit: a single scroll container holds
+  // both the axis header and the rows, each sized to chartWidth. This keeps the
+  // axis and bars locked together without JS scroll-syncing.
+  const scroller = document.createElement("div");
+  scroller.className = "gantt-scroll";
+
+  const LABEL_W = 160;   // must match --gantt-label-w in CSS
+  const inner = document.createElement("div");
+  inner.className = "gantt-inner";
+  inner.style.width = (LABEL_W + chartWidth) + "px";   // label column + the date track
+
+  // --- Axis header: a weekly tick + label every 7 days ---
+  const axis = document.createElement("div");
+  axis.className = "gantt-axis";
+  axis.style.width = chartWidth + "px";
+  for (let d = 0; d < totalDays; d += 7) {
+    const tickDate = addDays(rangeStart, d);
+    const tick = document.createElement("div");
+    tick.className = "gantt-tick";
+    tick.style.left = (d * GANTT_PX_PER_DAY) + "px";
+    tick.textContent = fmtDate(tickDate).replace(/, \d{4}$/, "");   // "Jun 1" — drop year to save space
+    axis.appendChild(tick);
+  }
+  inner.appendChild(axis);
+
+  // --- Today line (only if today falls within the padded range) ---
+  if (daysBetween(rangeStart, today) >= 0 && daysBetween(today, rangeEnd) >= 0) {
+    const line = document.createElement("div");
+    line.className = "gantt-today-line";
+    line.style.left = dateToX(today, rangeStart, GANTT_PX_PER_DAY) + "px";
+    line.title = "Today";
+    inner.appendChild(line);
+  }
+
+  // --- Rows, grouped under project headings (reuse the List grouping) ---
+  // groupByProject only includes groups with tasks; we group the DATED tasks.
+  const groups = (projectFilter === "all" && projects.length > 0)
+    ? groupByProject(dated)
+    : [{ name: null, tasks: dated }];   // flat when filtered to one project / no projects
+
+  groups.forEach(g => {
+    if (g.name) {
+      const heading = document.createElement("div");
+      heading.className = "gantt-group";
+      heading.textContent = g.name;
+      inner.appendChild(heading);
+    }
+    g.tasks.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "gantt-row";
+
+      const label = document.createElement("div");
+      label.className = "gantt-row-label";
+      label.textContent = t.title;            // safe text
+      label.title = t.title;
+      row.appendChild(label);
+
+      const track = document.createElement("div");
+      track.className = "gantt-track";
+      track.style.width = chartWidth + "px";
+
+      const dates = ganttBarDates(t);
+      const bar = document.createElement("div");
+      bar.className = "gantt-bar " + t.status;
+      const left = dateToX(dates.start, rangeStart, GANTT_PX_PER_DAY);
+      // width spans inclusive days (a same-day task = 1 day wide), min-clamped
+      const width = Math.max(GANTT_MIN_BAR, (daysBetween(dates.start, dates.end) + 1) * GANTT_PX_PER_DAY);
+      bar.style.left = left + "px";
+      bar.style.width = width + "px";
+      const range_lbl = dates.start === dates.end ? fmtDate(dates.start) : `${fmtDate(dates.start)} → ${fmtDate(dates.end)}`;
+      bar.title = `${t.title} (${range_lbl})`;
+      const barText = document.createElement("span");
+      barText.className = "gantt-bar-text";
+      barText.textContent = t.title;
+      bar.appendChild(barText);
+      track.appendChild(bar);
+
+      row.appendChild(track);
+      inner.appendChild(row);
+    });
+  });
+
+  scroller.appendChild(inner);
+  wrap.appendChild(scroller);
+
+  // --- Undated tasks: listed below, since they can't be placed on a timeline ---
+  if (undated.length) {
+    const sec = document.createElement("div");
+    sec.className = "gantt-undated";
+    const h = document.createElement("div");
+    h.className = "gantt-undated-head";
+    h.textContent = `Undated (${undated.length}) — add a start or due date to chart these`;
+    sec.appendChild(h);
+    undated.forEach(t => {
+      const chip = document.createElement("span");
+      chip.className = "gantt-undated-chip " + t.status;
+      chip.textContent = t.title;             // safe text
+      sec.appendChild(chip);
+    });
+    wrap.appendChild(sec);
+  }
+}
+
 // --- View router (extend here for future views) ---
 const VIEWS = {
   list: renderList,
   kanban: renderKanban,
   calendar: renderCalendar,
-  // gantt: renderGantt,
+  gantt: renderGantt,
 };
 function render() {
   // Keep all project-aware controls in sync with the current projects list
@@ -1700,6 +1966,7 @@ function render() {
   document.getElementById("view-list").style.display = currentView === "list" ? "" : "none";
   document.getElementById("view-kanban").style.display = currentView === "kanban" ? "" : "none";
   document.getElementById("view-calendar").style.display = currentView === "calendar" ? "" : "none";
+  document.getElementById("view-gantt").style.display = currentView === "gantt" ? "" : "none";
   (VIEWS[currentView] || renderList)();
 }
 // Rebuild every control that lists projects: the management panel, the
