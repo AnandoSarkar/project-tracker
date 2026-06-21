@@ -53,8 +53,11 @@ manifest.webmanifest  # unchanged
   config.js           # Supabase project URL + anon key (public, safe to commit)
 ```
 
-- `index.html` loads the Supabase SDK from CDN (`<script type="module">` importing from
-  `https://esm.sh/@supabase/supabase-js`), then imports the local modules.
+- `index.html` loads the Supabase SDK from CDN inside `js/cloud.js` (an ES module importing
+  `https://esm.sh/@supabase/supabase-js@2.45.4`, version-pinned). `config.js` + `store.js` are
+  classic scripts loaded first; `cloud.js` is a deferred module that exposes `window.Cloud` and
+  fires a `cloud-ready` event. (Classic-vs-module split chosen for load-order safety with the
+  existing global app script — see Phase 2 note.)
 - `store.js` exposes the SAME function names the app already calls (`load`, `save`,
   `loadProjects`, `saveProjects`, `loadMilestones`, `saveMilestones`, plus the CRUD helpers).
   Internally it checks "is there a logged-in session?" and dispatches to local or cloud.

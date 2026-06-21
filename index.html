@@ -703,7 +703,12 @@
      the app's load/save wrappers run. Both are classic scripts, so they execute
      in order. (The app wires all events via addEventListener — no inline handlers —
      so nothing depends on these globals before this point.) -->
+<script src="./js/config.js"></script>
 <script src="./js/store.js"></script>
+<!-- Supabase client (ES module — imports the SDK from CDN). Deferred, so it loads
+     after the app script; the app doesn't touch window.Cloud yet (Phase 3 = init only)
+     and fires a "cloud-ready" event when available. -->
+<script type="module" src="./js/cloud.js"></script>
 <script>
 /* ---------------------------------------------------------
    Project Tracker — vanilla JS, localStorage persistence
