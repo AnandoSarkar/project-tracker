@@ -278,6 +278,9 @@
     border: 1px solid var(--red); border-radius: 8px;
     padding: 9px 12px; margin-bottom: 14px; font-size: 13px;
   }
+  .sync-banner.ok {
+    background: var(--pill-done-bg, #dcfff1); color: var(--green); border-color: var(--green);
+  }
 
   /* Account / auth panel */
   .auth-intro { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
@@ -2547,16 +2550,19 @@ function setAuthMsg(text, kind) {
   msg.className = "auth-msg" + (kind ? " " + kind : "");
 }
 
-// Show a dismissible sync-error banner (auto-hides after a while).
+// Show a dismissible banner (auto-hides). kind: "error" (default) | "ok".
 let _syncBannerTimer = null;
-function showSyncError(text) {
+function showBanner(text, kind) {
   const b = document.getElementById("syncBanner");
   if (!b) return;
   b.textContent = text;
+  b.className = "sync-banner" + (kind === "ok" ? " ok" : "");
   b.hidden = false;
   clearTimeout(_syncBannerTimer);
   _syncBannerTimer = setTimeout(() => { b.hidden = true; }, 6000);
 }
+// Back-compat alias used by the cloud write seam.
+function showSyncError(text) { showBanner(text, "error"); }
 
 // Open/close the account panel (closes the other panels for symmetry).
 document.getElementById("accountBtn").addEventListener("click", () => {
@@ -2579,16 +2585,76 @@ document.getElementById("accountClose").addEventListener("click", () => {
 async function enterCloudMode(user) {
   cloudUser = user;
   try {
+    // Snapshot LOCAL data first — before the cloud fetch overwrites the in-memory
+    // arrays — so a first-login migration can offer to upload it.
+    const localSnapshot = {
+      tasks: load(),
+      projects: loadProjects(),
+      milestones: loadMilestones(),
+    };
+    const localCount = localSnapshot.tasks.length + localSnapshot.projects.length + localSnapshot.milestones.length;
+
     const data = await Cloud.fetchAll();
     if (!data) return;
+    const cloudCount = data.tasks.length + data.projects.length + data.milestones.length;
+
+    // First-login migration: cloud is empty but this device has data → offer upload.
+    // We do NOT touch localStorage yet (so the local copy stays intact as the source).
+    if (cloudCount === 0 && localCount > 0) {
+      tasks = localSnapshot.tasks;
+      projects = localSnapshot.projects;
+      milestones = localSnapshot.milestones;
+      render();                       // keep showing the local data behind the prompt
+      offerMigration(localSnapshot);  // async; uploads on confirm
+      return;
+    }
+
+    // Normal cloud load: cloud is the source of truth.
     tasks = data.tasks.map(normalizeTask);
     projects = data.projects.map(normalizeProject);
     milestones = data.milestones.map(normalizeMilestone);
-    // keep the local cache mirrored (offline-open shows last cloud state)
-    save(); saveProjects(); saveMilestones();
+    save(); saveProjects(); saveMilestones();   // mirror cloud → local cache
     render();
   } catch (e) {
     cloudFail("load", e.message || e);
+  }
+}
+
+// First-login migration prompt + upload. Pushes local data to the cloud in the
+// right order (projects first, so tasks/milestones can resolve project_id), then
+// re-enters cloud mode so the app shows the freshly-populated cloud data.
+// Never deletes the local copy — it remains a safety net.
+async function offerMigration(snapshot) {
+  const n = snapshot.tasks.length;
+  const np = snapshot.projects.length;
+  const nm = snapshot.milestones.length;
+  const parts = [];
+  if (n)  parts.push(n  + " task"      + (n===1?"":"s"));
+  if (np) parts.push(np + " project"   + (np===1?"":"s"));
+  if (nm) parts.push(nm + " milestone" + (nm===1?"":"s"));
+  const ok = confirm(
+    "Welcome! This device has " + parts.join(", ") + " stored locally.\n\n" +
+    "Upload them to your account so they sync across devices?\n\n" +
+    "OK = upload   ·   Cancel = start with an empty cloud account (your local data stays on this device)."
+  );
+  if (!ok) {
+    // User declined: switch to the (empty) cloud as source of truth. Local data
+    // is untouched and still recoverable via Export/Import.
+    tasks = []; projects = []; milestones = [];
+    save(); saveProjects(); saveMilestones();
+    render();
+    return;
+  }
+  try {
+    // Order matters: projects before tasks/milestones (FK resolution by client_id).
+    for (const p of snapshot.projects)   { const r = await Cloud.upsertProject(p, cloudUser.id);   if (r.error) throw new Error(r.error); }
+    for (const t of snapshot.tasks)      { const r = await Cloud.upsertTask(t, cloudUser.id);      if (r.error) throw new Error(r.error); }
+    for (const m of snapshot.milestones) { const r = await Cloud.upsertMilestone(m, cloudUser.id); if (r.error) throw new Error(r.error); }
+    showBanner("Uploaded your local data to the cloud. ✓", "ok");
+    // Re-fetch so the app now reflects the cloud copy (round-trip confirmation).
+    await enterCloudMode(cloudUser);
+  } catch (e) {
+    cloudFail("upload", e.message || e);
   }
 }
 // Back to local-only: reload from localStorage and render.

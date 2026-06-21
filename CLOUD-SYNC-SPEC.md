@@ -141,13 +141,16 @@ inert `depends_on` hook.
 - **Google / OAuth is deferred** to a later iteration — `signInWithOAuth({ provider: 'google' })`
   can be added without disturbing the data seam or schema when wanted.
 
-## First-login data migration
+## First-login data migration (Phase 6 — built)
 
-When a user signs in and their cloud account has **zero** rows across the three tables, and
-local data exists, prompt: *"Upload your N local tasks / projects / milestones to your account?"*
-On yes: push local data up (rewriting ids, mapping `projectId` references the same way
-import-merge already does), then switch to cloud-as-source-of-truth. On no: start cloud empty
-(local data stays in the browser; Export/Import remains the manual bridge).
+In `enterCloudMode`: snapshot local data BEFORE the cloud fetch overwrites memory. If the cloud
+returns **zero** rows across all three tables AND local data exists, call `offerMigration` (a
+confirm prompt). On **yes**: upsert local data to the cloud in order — **projects → tasks →
+milestones** (so tasks/milestones can resolve `project_id` by the project's `client_id`) — keeping
+the app's ids, then re-`enterCloudMode` to show the now-populated cloud copy. On **no**: switch to
+the empty cloud as source of truth. **Local data is never deleted** either way (Export/Import +
+the localStorage copy remain a safety net). Success/▸error shown via the shared banner
+(`showBanner(text, "ok"|"error")`).
 
 ## Edge cases & risks to plan for
 
