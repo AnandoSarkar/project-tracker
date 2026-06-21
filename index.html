@@ -2768,44 +2768,52 @@ render();
 // Wrapped in a feature check + after load so it never blocks the app,
 // and registered with a relative path so it works under /project-tracker/.
 if ("serviceWorker" in navigator) {
+  // Attach the controllerchange→reload listener at TOP LEVEL (not inside a later
+  // callback) so it's registered before any skipWaiting can fire — this was the
+  // Chrome-specific miss: a late listener could never see the event. Guard so we
+  // reload exactly once.
+  let _reloadedForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (_reloadedForUpdate) return;
+    _reloadedForUpdate = true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").then(reg => {
-      // Detect a newly-installed SW waiting to take over and offer a reload.
-      // (Previously a deploy only showed up on the *next* navigation, which made
-      //  pushed changes appear "stale" — this surfaces the update immediately.)
-      function promptIfWaiting(worker) {
+      function watch(worker) {
         if (!worker) return;
         worker.addEventListener("statechange", () => {
-          // "installed" + an existing controller = an update (not first install).
           if (worker.state === "installed" && navigator.serviceWorker.controller) {
             showUpdatePrompt(worker);
           }
         });
       }
       if (reg.waiting && navigator.serviceWorker.controller) showUpdatePrompt(reg.waiting);
-      reg.addEventListener("updatefound", () => promptIfWaiting(reg.installing));
+      reg.addEventListener("updatefound", () => watch(reg.installing));
     }).catch(err => {
       console.warn("Service worker registration failed:", err);
-    });
-
-    // When the new SW takes control, reload once so the fresh assets render.
-    let _reloadedForUpdate = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (_reloadedForUpdate) return;
-      _reloadedForUpdate = true;
-      window.location.reload();
     });
   });
 }
 
-// Show a persistent "new version" banner with a Reload action. Clicking it tells
-// the waiting SW to skipWaiting → it activates → controllerchange → auto-reload.
+// Show a "new version" banner with a Reload action. Clicking it tells the waiting
+// SW to skipWaiting → it activates → controllerchange (above) reloads once.
+// Fallback: if no controllerchange arrives shortly (Chrome timing edge cases),
+// force a hard reload anyway so the button never feels dead.
 function showUpdatePrompt(worker) {
   const b = document.getElementById("updateBanner");
   if (!b) return;
   b.hidden = false;
   const btn = document.getElementById("updateReloadBtn");
-  btn.onclick = () => { btn.disabled = true; worker.postMessage({ type: "SKIP_WAITING" }); };
+  btn.onclick = () => {
+    btn.disabled = true;
+    btn.textContent = "Reloading…";
+    try { worker.postMessage({ type: "SKIP_WAITING" }); } catch (e) {}
+    // Safety net: controllerchange should fire and reload; if it doesn't within
+    // 1.5s, reload manually (by then the new SW has usually activated anyway).
+    setTimeout(() => { if (!window.__reloadedForUpdate2) { window.__reloadedForUpdate2 = true; window.location.reload(); } }, 1500);
+  };
 }
 
 // --- Online/offline awareness (Phase 8) ---
