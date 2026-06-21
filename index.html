@@ -281,6 +281,18 @@
   .sync-banner.ok {
     background: var(--pill-done-bg, #dcfff1); color: var(--green); border-color: var(--green);
   }
+  /* App-update banner */
+  .update-banner {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--accent-soft); color: var(--ink);
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 14px; font-size: 13px;
+  }
+  .update-banner button {
+    margin-left: auto; background: var(--accent); color: #fff; border: none;
+    border-radius: 6px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .update-banner button:disabled { opacity: .6; cursor: default; }
 
   /* Account / auth panel */
   .auth-intro { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
@@ -568,6 +580,12 @@
   <div class="wrap">
     <!-- Sync error banner (hidden until a cloud write/read fails). -->
     <div class="sync-banner" id="syncBanner" hidden></div>
+
+    <!-- App-update banner (shown when a new service-worker version is ready). -->
+    <div class="update-banner" id="updateBanner" hidden>
+      <span>A new version of the app is available.</span>
+      <button type="button" id="updateReloadBtn">Reload</button>
+    </div>
 
     <!-- Account / auth panel (collapsible). Reuses .projects-panel / .pp-* styling.
          Body is rendered by JS: a sign-in/up form when logged out, account info when in. -->
@@ -2751,11 +2769,58 @@ render();
 // and registered with a relative path so it works under /project-tracker/.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(err => {
+    navigator.serviceWorker.register("./sw.js").then(reg => {
+      // Detect a newly-installed SW waiting to take over and offer a reload.
+      // (Previously a deploy only showed up on the *next* navigation, which made
+      //  pushed changes appear "stale" — this surfaces the update immediately.)
+      function promptIfWaiting(worker) {
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          // "installed" + an existing controller = an update (not first install).
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdatePrompt(worker);
+          }
+        });
+      }
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdatePrompt(reg.waiting);
+      reg.addEventListener("updatefound", () => promptIfWaiting(reg.installing));
+    }).catch(err => {
       console.warn("Service worker registration failed:", err);
+    });
+
+    // When the new SW takes control, reload once so the fresh assets render.
+    let _reloadedForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (_reloadedForUpdate) return;
+      _reloadedForUpdate = true;
+      window.location.reload();
     });
   });
 }
+
+// Show a persistent "new version" banner with a Reload action. Clicking it tells
+// the waiting SW to skipWaiting → it activates → controllerchange → auto-reload.
+function showUpdatePrompt(worker) {
+  const b = document.getElementById("updateBanner");
+  if (!b) return;
+  b.hidden = false;
+  const btn = document.getElementById("updateReloadBtn");
+  btn.onclick = () => { btn.disabled = true; worker.postMessage({ type: "SKIP_WAITING" }); };
+}
+
+// --- Online/offline awareness (Phase 8) ---
+// When signed in, going offline means cloud writes can't reach the server.
+function reflectOnlineState() {
+  if (navigator.onLine) return;            // only warn when offline
+  if (typeof cloudUser !== "undefined" && cloudUser) {
+    showBanner("You're offline — changes are saved on this device and will need a reload to re-sync when you're back online.", "error");
+  }
+}
+window.addEventListener("offline", reflectOnlineState);
+window.addEventListener("online", () => {
+  const b = document.getElementById("syncBanner");
+  if (b) { b.className = "sync-banner ok"; b.textContent = "Back online."; b.hidden = false; setTimeout(() => { b.hidden = true; }, 3000); }
+});
 </script>
 </body>
 </html>

@@ -13,7 +13,7 @@
 // The name is part of the cache key, so a new version creates a
 // fresh cache and the old one gets deleted in `activate` below.
 // (This is how you ship updates — otherwise users keep the old cached copy.)
-const CACHE = "project-tracker-v16";
+const CACHE = "project-tracker-v17";
 
 // The "app shell": the minimum set of files needed to render the
 // app. Tasks themselves live in localStorage, so once these are
@@ -33,14 +33,18 @@ const SHELL = [
 
 // INSTALL — fired once when this SW version is first seen.
 // Open the versioned cache and store the shell files in it.
-// skipWaiting() lets a new version take over without waiting
-// for every old tab to close.
+// NOTE: we deliberately do NOT call skipWaiting() here — the new SW waits until
+// the user clicks "Reload" in the update banner (which posts SKIP_WAITING). That
+// makes deploys surface immediately and predictably instead of on a later visit.
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE)
-      .then(cache => cache.addAll(SHELL))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(cache => cache.addAll(SHELL))
   );
+});
+
+// The page (update banner) asks us to activate now.
+self.addEventListener("message", event => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 // ACTIVATE — fired when this SW takes control. Delete any caches
